@@ -1,0 +1,34 @@
+import { Router } from 'express';
+import authRoutes from './auth.routes';
+import tableRoutes from './table.routes';
+import orderRoutes from './order.routes';
+import categoryRoutes from './category.routes';
+import productRoutes from './product.routes';
+import stockRoutes from './stock.routes';
+import supplierRoutes from './supplier.routes';
+import financeRoutes from './finance.routes';
+import customerRoutes from './customer.routes';
+import configRoutes from './config.routes';
+import userRoutes from './user.routes';
+import marmitaMenuRoutes from './marmitaMenu.routes';
+import productStockLinkRoutes from './productStockLink.routes';
+import cashRegisterRoutes from './cashRegister.routes';
+
+const router = Router();
+
+router.use('/auth', authRoutes);
+router.use('/users', userRoutes);
+router.use('/tables', tableRoutes);
+router.use('/orders', orderRoutes);
+router.use('/categories', categoryRoutes);
+router.use('/products', productRoutes);
+router.use('/stock', stockRoutes);
+router.use('/suppliers', supplierRoutes);
+router.use('/finance', financeRoutes);
+router.use('/customers', customerRoutes);
+router.use('/config', configRoutes);
+router.use('/marmita-menu', marmitaMenuRoutes);
+router.use('/product-stock-links', productStockLinkRoutes);
+router.use('/cash-register', cashRegisterRoutes);
+
+export default router;

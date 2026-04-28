@@ -1,0 +1,45 @@
+# Node
+node_modules/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Database
+*.db
+*.db-journal
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Prisma
+backend/prisma/migrations/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Coverage (testes)
+coverage/
+
+# Frontend cache (caso aplicável)
+.next/
+.turbo/
+
+# Supabase (tipos gerados)
+**/database.types.ts
+
+# Backup de migrations Prisma (após migração)
+backend/prisma_backup/

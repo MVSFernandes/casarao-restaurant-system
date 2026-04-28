@@ -1,0 +1,17 @@
+{
+  "name": "restaurant-system",
+  "version": "1.0.0",
+  "description": "Sistema completo de gestão de restaurante (monorepo)",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "setup": "cd backend && npx prisma migrate dev --name init && npm run prisma:seed",
+    "start": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "keywords": ["restaurant", "pos", "management", "nodejs", "react"],
+  "author": "",
+  "license": "MIT"
+}

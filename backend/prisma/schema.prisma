@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Autenticação e Usuários ---
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      String // ADMIN, CASHIER, WAITER, FINANCE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  auditLogs          AuditLog[]
+  orders             Order[]
+  waiterOrders       Order[]               @relation("WaiterOrders")
+  openedCashSessions CashRegisterSession[]  @relation("CashSessionOpenedBy")
+  closedCashSessions CashRegisterSession[]  @relation("CashSessionClosedBy")
+  cashWithdrawals    CashWithdrawal[]       @relation("CashWithdrawalCreatedBy")
+}
+
+// --- Auditoria ---
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  entity    String
+  entityId  String
+  details   String?  @db.Text // <-- ADICIONADO PARA EVITAR CORTES NOS LOGS
+  createdAt DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+// --- Cardápio ---
+
+model Category {
+  id                    String    @id @default(cuid())
+  name                  String    @unique
+  isMealCategory        Boolean   @default(false)
+  pricePerKg            Float?
+  selfServicePricePerKg Float?
+  products              Product[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  isByWeight  Boolean  @default(false)
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categoryId String
+  category   Category           @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+  stockItems ProductStockItem[]
+}
+
+// --- Pedidos e Mesas ---
+
+model Table {
+  id     String  @id @default(cuid())
+  number Int     @unique
+  status String  @default("AVAILABLE")
+  orders Order[]
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  type      String
+  status    String   @default("NEW")
+  total     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customerName String?
+
+  deliveryStreet       String?
+  deliveryNumber       String?
+  deliveryNeighborhood String?
+  deliveryReference    String?
+  deliveryPhone        String?
+  deliveryNotes        String?  @db.Text // <-- ADICIONADO PARA EVITAR CORTES NAS INSTRUÇÕES DE ENTREGA
+  deliveryFee          Float    @default(0)
+  deliveryType         String?  @default("URBAN")
+
+  items      OrderItem[]
+  tableId    String?
+  table      Table?      @relation(fields: [tableId], references: [id])
+  userId     String
+  user       User        @relation(fields: [userId], references: [id])
+  waiterId   String?
+  waiter     User?       @relation("WaiterOrders", fields: [waiterId], references: [id])
+  customerId String?
+  customer   Customer?   @relation(fields: [customerId], references: [id])
+  payment    Payment?
+
+  cashRegisterSessionId String?
+  cashRegisterSession   CashRegisterSession? @relation(fields: [cashRegisterSessionId], references: [id])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  quantity    Int     @default(1)
+  weight      Float?
+  price       Float
+  unitPrice   Float?
+  manualPrice Float?  
+  saleType    String?
+  notes       String? @db.Text // <-- ADICIONADO PARA RESOLVER O PROBLEMA DOS EXTRAS DA MARMITA
+
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+}
+
+// --- Pagamentos ---
+
+model Payment {
+  id            String   @id @default(cuid())
+  method        String
+  amount        Float
+  status        String   @default("PENDING")
+  transactionId String?
+  createdAt     DateTime @default(now())
+
+  orderId String @unique
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+}
+
+model CashRegisterSession {
+  id              String   @id @default(cuid())
+  status          String   @default("OPEN")
+  openingAmount   Float
+  closingAmount   Float?
+  withdrawalTotal Float    @default(0)
+  notes           String?
+  openedAt        DateTime @default(now())
+  closedAt        DateTime?
+
+  openedById String
+  openedBy   User   @relation("CashSessionOpenedBy", fields: [openedById], references: [id])
+  closedById String?
+  closedBy   User?  @relation("CashSessionClosedBy", fields: [closedById], references: [id])
+
+  withdrawals CashWithdrawal[]
+  orders      Order[]
+}
+
+model CashWithdrawal {
+  id        String   @id @default(cuid())
+  amount    Float
+  reason    String
+  createdAt DateTime @default(now())
+
+  sessionId   String
+  session     CashRegisterSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User @relation("CashWithdrawalCreatedBy", fields: [createdById], references: [id])
+}
+
+// --- Clientes e Fiado ---
+
+model Customer {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String?  @unique
+  email       String?  @unique
+  address     String?
+  creditLimit Float    @default(0)
+  creditUsed  Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  orders    Order[]
+  creditTxs CreditTransaction[]
+}
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  type        String
+  amount      Float
+  description String?
+  createdAt   DateTime @default(now())
+
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+}
+
+// --- Estoque e Fornecedores ---
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  contact   String?
+  phone     String?
+  email     String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stockItems      SupplierStockItem[]
+  payableAccounts PayableAccount[]
+}
+
+model StockItem {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  quantity    Float
+  unit        String
+  minQuantity Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  productLinks  ProductStockItem[]
+  supplierLinks SupplierStockItem[]
+}
+
+model ProductStockItem {
+  id          String @id @default(cuid())
+  quantity    Float
+
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, stockItemId])
+}
+
+model SupplierStockItem {
+  id          String   @id @default(cuid())
+  price       Float
+  lastUpdated DateTime @updatedAt
+
+  supplierId  String
+  supplier    Supplier  @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, stockItemId])
+}
+
+// --- Financeiro ---
+
+model PayableAccount {
+  id          String    @id @default(cuid())
+  description String
+  amount      Float
+  dueDate     DateTime
+  paid        Boolean   @default(false)
+  paidAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id])
+}
+
+// --- Configurações do Restaurante ---
+
+model RestaurantConfig {
+  id               String   @id @default(cuid())
+  name             String
+  logoUrl          String?
+  bannerUrl        String?
+  address          String?
+  phone            String?
+  openingHours     String?
+  openingDays      String?
+  deliveryFee      Float?
+  urbanDeliveryFee Float?   @default(1.0)
+  ruralDeliveryFee Float?   @default(3.0)
+  enabledPayments  String?
+  updatedAt        DateTime @updatedAt
+}
+
+model MarmitaMenuItem {
+  id        String   @id @default(cuid())
+  dayOfWeek Int
+  name      String
+  group     String
+  price     Float    @default(0)
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
