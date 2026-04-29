@@ -9,13 +9,16 @@
     "start": "node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "ts-node prisma/seed.ts"
+    "prisma:seed": "ts-node prisma/seed.ts",
+    "supabase:types": "supabase gen types typescript --project-id ipwyxkbgtwjzxuvlbnhy | Out-File -Encoding utf8 src/types/database.ts",
+    "smoke:supabase": "ts-node scripts/smoke-supabase.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@prisma/client": "^5.12.1",
+    "@supabase/supabase-js": "^2.105.1",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
@@ -36,6 +39,7 @@
     "@types/jsonwebtoken": "^9.0.6",
     "@types/node": "^20.12.7",
     "prisma": "^5.12.1",
+    "supabase": "^2.95.6",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"

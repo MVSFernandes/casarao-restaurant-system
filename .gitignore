@@ -38,8 +38,13 @@ coverage/
 .next/
 .turbo/
 
-# Supabase (tipos gerados)
-**/database.types.ts
+# Supabase (tipos gerados localmente — cada dev gera o seu)
+**/database.ts
+backend/src/types/database.ts
 
 # Backup de migrations Prisma (após migração)
 backend/prisma_backup/
+
+# Supabase CLI (config local, não versionar)
+.supabase/
+backend/supabase/
