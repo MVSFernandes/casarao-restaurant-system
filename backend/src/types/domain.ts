@@ -165,7 +165,7 @@ export interface SupplierStockItem {
   supplierId: string;
   stockItemId: string;
   price: number;
-  lastUpdated: Date;
+  updatedAt: Date;  
 }
 
 // ============================================================================
