@@ -54,6 +54,21 @@ export const supplierStockItemRepository = {
     return (data ?? []).map(toSupplierStockItemDomain);
   },
 
+  async findBySupplierAndStockItem(
+    supplierId: string,
+    stockItemId: string
+  ): Promise<SupplierStockItem | null> {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('supplier_id', supplierId)
+      .eq('stock_item_id', stockItemId)
+      .maybeSingle();
+
+    if (error) throw mapSupabaseError(error, { entity: 'SupplierStockItem' });
+    return data ? toSupplierStockItemDomain(data) : null;
+  },
+
   async create(item: SupplierStockItem): Promise<SupplierStockItem> {
     const payload = toSupplierStockItemInsert(item);
     const { data, error } = await supabase

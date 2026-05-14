@@ -29,6 +29,16 @@ export const paymentRepository = {
     return (data ?? []).map(toPaymentDomain);
   },
 
+  async findBySession(sessionId: string): Promise<Payment[]> {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*, orders!inner(cash_register_session_id)')
+      .eq('orders.cash_register_session_id', sessionId);
+
+    if (error) throw mapSupabaseError(error, { entity: 'Payment' });
+    return (data ?? []).map(toPaymentDomain);
+  },
+
   async create(payment: Payment): Promise<Payment> {
     const payload = toPaymentInsert(payment);
     const { data, error } = await supabase

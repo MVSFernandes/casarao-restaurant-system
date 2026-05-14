@@ -1,58 +1,108 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { UserRepository } from '../repositories/user.repository';
-import { User } from '@prisma/client';
+import { userRepository } from '../repositories/user.repository';
+import { User } from '../types/domain';
 
-export class AuthService {
-  constructor(private userRepository: UserRepository) {}
+export type UserPublic = Omit<User, 'password'>;
 
-  async login(email: string, password: string): Promise<{ accessToken: string; refreshToken: string; user: Omit<User, 'password'> }> {
-    const user = await this.userRepository.findByEmail(email);
-    if (!user) {
-      throw new Error('Invalid credentials');
-    }
+export interface LoginResult {
+  accessToken: string;
+  refreshToken: string;
+  user: UserPublic;
+}
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      throw new Error('Invalid credentials');
-    }
+const generateAccessToken = (user: UserPublic): string =>
+  jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET!, {
+    expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any,
+  });
 
-    const { password: _, ...userWithoutPassword } = user;
+const generateRefreshToken = (user: UserPublic): string =>
+  jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET!, {
+    expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any,
+  });
 
-    const accessToken = this.generateAccessToken(userWithoutPassword);
-    const refreshToken = this.generateRefreshToken(userWithoutPassword);
+export const authService = {
+  async login(email: string, password: string): Promise<LoginResult> {
+    const user = await userRepository.findByEmail(email);
+    if (!user) throw new Error('Invalid credentials');
 
-    return { accessToken, refreshToken, user: userWithoutPassword };
-  }
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) throw new Error('Invalid credentials');
+
+    const { password: _, ...userPublic } = user;
+    return {
+      accessToken: generateAccessToken(userPublic),
+      refreshToken: generateRefreshToken(userPublic),
+      user: userPublic,
+    };
+  },
 
   async refreshToken(token: string): Promise<{ accessToken: string }> {
     try {
       const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as { id: string };
+      const user = await userRepository.findById(decoded.id);
+      if (!user) throw new Error('User not found');
+
+      const { password: _, ...userPublic } = user;
+      return { accessToken: generateAccessToken(userPublic) };
+    } catch {
+      throw new Error('Invalid refresh token');
+    }
+  },
+
+  async getMe(userId: string): Promise<UserPublic> {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new Error('User not found');
+    const { password: _, ...userPublic } = user;
+    return userPublic;
+  },
+};
+
+// ============================================================================
+// LEGACY — mantido para compatibilidade com auth.controller.ts até a Onda 6.
+// Quando o controller for refatorado, este bloco será removido.
+// ============================================================================
+
+import { UserRepository } from '../repositories/user.repository';
+import { User as PrismaUser } from '@prisma/client';
+
+export class AuthService {
+  constructor(private userRepository: UserRepository) {}
+
+  async login(email: string, password: string) {
+    const user = await this.userRepository.findByEmail(email);
+    if (!user) throw new Error('Invalid credentials');
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) throw new Error('Invalid credentials');
+    const { password: _, ...userPublic } = user;
+    return {
+      accessToken: this._generateAccessToken(userPublic),
+      refreshToken: this._generateRefreshToken(userPublic),
+      user: userPublic,
+    };
+  }
+
+  async refreshToken(token: string) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET!) as { id: string };
       const user = await this.userRepository.findById(decoded.id);
-
-      if (!user) {
-        throw new Error('User not found');
-      }
-      
-      const { password: _, ...userWithoutPassword } = user;
-
-      const accessToken = this.generateAccessToken(userWithoutPassword);
-      return { accessToken };
-    } catch (error) {
+      if (!user) throw new Error('User not found');
+      const { password: _, ...userPublic } = user;
+      return { accessToken: this._generateAccessToken(userPublic) };
+    } catch {
       throw new Error('Invalid refresh token');
     }
   }
 
-  private generateAccessToken(user: Omit<User, 'password'>): string {
+  private _generateAccessToken(user: Omit<PrismaUser, 'password'>) {
     return jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET!, {
       expiresIn: (process.env.JWT_EXPIRES_IN || '15m') as any,
     });
   }
 
-  private generateRefreshToken(user: Omit<User, 'password'>): string {
+  private _generateRefreshToken(user: Omit<PrismaUser, 'password'>) {
     return jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET!, {
       expiresIn: (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as any,
     });
   }
 }
-

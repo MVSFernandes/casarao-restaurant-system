@@ -23,6 +23,7 @@ export class UserRepository {
   async findByEmail(email: string): Promise<PrismaUser | null> {
     return prisma.user.findUnique({ where: { email } });
   }
+
   async findById(id: string): Promise<PrismaUser | null> {
     return prisma.user.findUnique({ where: { id } });
   }
@@ -71,6 +72,17 @@ export const userRepository = {
       .maybeSingle();
 
     if (error) throw mapSupabaseError(error, { entity: 'User', field: 'email' });
+    return data ? toUserDomain(data) : null;
+  },
+
+  async findAdminUser(): Promise<User | null> {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('role', 'ADMIN')
+      .maybeSingle();
+
+    if (error) throw mapSupabaseError(error, { entity: 'User' });
     return data ? toUserDomain(data) : null;
   },
 

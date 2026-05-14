@@ -1,4 +1,4 @@
-﻿import { supabase } from '../lib/supabase';
+import { supabase } from '../lib/supabase';
 import { Customer } from '../types/domain';
 import { mapSupabaseError } from '../middlewares/errorHandler.middleware';
 import {
@@ -32,11 +32,17 @@ export const customerRepository = {
     return data ? toCustomerDomain(data) : null;
   },
 
+  /**
+   * Busca cliente por nome (case-insensitive, partial match).
+   * Usa o índice GIN trigram (idx_customers_name_trgm) para performance.
+   *
+   * Ex: searchByName('jão') retorna 'João Silva', 'Jãozinho', etc.
+   */
   async searchByName(query: string): Promise<Customer[]> {
     const { data, error } = await supabase
       .from(TABLE)
       .select('*')
-      .ilike('name', '%' + query + '%')
+      .ilike('name', `%${query}%`)
       .order('name', { ascending: true })
       .limit(50);
 
@@ -44,6 +50,10 @@ export const customerRepository = {
     return (data ?? []).map(toCustomerDomain);
   },
 
+  /**
+   * Lista clientes que têm dívida ativa (credit_used > 0).
+   * Útil pra tela de "Fiados em aberto" no painel admin.
+   */
   async findWithCreditDebt(): Promise<Customer[]> {
     const { data, error } = await supabase
       .from(TABLE)
@@ -55,6 +65,10 @@ export const customerRepository = {
     return (data ?? []).map(toCustomerDomain);
   },
 
+  /**
+   * Busca cliente pelo telefone (usado em pedidos públicos do cardápio online).
+   * Retorna null se não encontrar (não lança erro).
+   */
   async findByPhone(phone: string): Promise<Customer | null> {
     const { data, error } = await supabase
       .from(TABLE)
