@@ -13,7 +13,9 @@
     "supabase:types": "supabase gen types typescript --project-id ipwyxkbgtwjzxuvlbnhy | Out-File -Encoding utf8 src/types/database.ts",
     "smoke:supabase": "ts-node scripts/smoke-supabase.ts",
     "smoke:category": "ts-node scripts/smoke-category-repo.ts",
-    "smoke:tier-a": "ts-node scripts/smoke-tier-a-repos.ts"
+    "smoke:tier-a": "ts-node scripts/smoke-tier-a-repos.ts",
+    "smoke:tier-b": "ts-node scripts/smoke-tier-b-repos.ts",
+    "smoke:tier-c": "ts-node scripts/smoke-tier-c-repos.ts"
   },
   "keywords": [],
   "author": "",
