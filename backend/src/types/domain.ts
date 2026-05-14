@@ -23,13 +23,13 @@ export type UserRole = 'ADMIN' | 'CASHIER' | 'WAITER' | 'KITCHEN' | 'DELIVERY';
 
 export type OrderStatus =
   | 'NEW'
-  | 'IN_PRODUCTION'
+  | 'IN_PROGRESS'
   | 'READY'
-  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
   | 'FINISHED'
   | 'CANCELED';
 
-export type OrderType = 'TABLE' | 'COUNTER' | 'DELIVERY';
+export type OrderType = 'DINE_IN' | 'TAKE_AWAY' | 'DELIVERY';
 
 export type PaymentMethod =
   | 'CASH'
