@@ -1,150 +1,66 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { productService } from '../services/domain.services';
+import { DomainError } from '../types/errors';
+
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  console.error(error);
+  return res.status(500).json({ message: fallback });
+};
 
 export const getProducts = async (req: Request, res: Response) => {
   try {
     const { categoryId } = req.query;
-
-    const products = await prisma.product.findMany({
-      where: categoryId ? { categoryId: categoryId as string } : undefined,
-      orderBy: { name: 'asc' },
-      include: {
-        category: true,
-        stockItems: {
-          include: {
-            stockItem: true,
-          },
-          orderBy: {
-            stockItem: {
-              name: 'asc',
-            },
-          },
-        },
-      },
-    });
-
+    const products = await productService.listAll(categoryId as string | undefined);
     res.json(products);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar produtos' });
+    handleError(res, error, 'Erro ao buscar produtos');
   }
 };
 
 export const getProductById = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        category: true,
-        stockItems: {
-          include: {
-            stockItem: true,
-          },
-          orderBy: {
-            stockItem: {
-              name: 'asc',
-            },
-          },
-        },
-      },
-    });
-
-    if (!product) {
-      return res.status(404).json({ message: 'Produto não encontrado' });
-    }
-
+    const product = await productService.findById(req.params.id);
     res.json(product);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar produto' });
+    handleError(res, error, 'Erro ao buscar produto');
   }
 };
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
     const { name, description, price, categoryId, imageUrl, isByWeight } = req.body;
-
-    const product = await prisma.product.create({
-      data: {
-        name,
-        description,
-        price: parseFloat(price),
-        categoryId,
-        imageUrl,
-        isByWeight: !!isByWeight,
-      },
-      include: {
-        category: true,
-        stockItems: {
-          include: {
-            stockItem: true,
-          },
-          orderBy: {
-            stockItem: {
-              name: 'asc',
-            },
-          },
-        },
-      },
+    const product = await productService.create({
+      name, description, price, categoryId, imageUrl, isByWeight,
     });
-
     res.status(201).json(product);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao criar produto' });
+    handleError(res, error, 'Erro ao criar produto');
   }
 };
 
 export const updateProduct = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const { name, description, price, categoryId, imageUrl, isByWeight } = req.body;
-
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        name,
-        description,
-        price: price !== undefined ? parseFloat(price) : undefined,
-        categoryId,
-        imageUrl,
-        isByWeight: isByWeight !== undefined ? !!isByWeight : undefined,
-      },
-      include: {
-        category: true,
-        stockItems: {
-          include: {
-            stockItem: true,
-          },
-          orderBy: {
-            stockItem: {
-              name: 'asc',
-            },
-          },
-        },
-      },
+    const product = await productService.update(req.params.id, {
+      name,
+      description,
+      price: price !== undefined ? parseFloat(price) : undefined,
+      categoryId,
+      imageUrl,
+      isByWeight: isByWeight !== undefined ? !!isByWeight : undefined,
     });
-
     res.json(product);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao atualizar produto' });
+    handleError(res, error, 'Erro ao atualizar produto');
   }
 };
 
 export const deleteProduct = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-
-    await prisma.product.delete({
-      where: { id },
-    });
-
+    await productService.delete(req.params.id);
     res.status(204).send();
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao excluir produto' });
+    handleError(res, error, 'Erro ao excluir produto');
   }
 };

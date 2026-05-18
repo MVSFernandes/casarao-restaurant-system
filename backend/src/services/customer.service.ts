@@ -1,126 +1,113 @@
-import { supabase } from '../lib/supabase';
-import { Customer } from '../types/domain';
-import { mapSupabaseError } from '../middlewares/errorHandler.middleware';
-import {
-  toCustomerDomain,
-  toCustomerInsert,
-  toCustomerUpdate,
-} from '../mappers/customer.mapper';
-import { NotFoundError } from '../types/errors';
+﻿import { createId } from '@paralleldrive/cuid2';
+import { customerRepository } from '../repositories/customer.repository';
+import { creditTransactionRepository } from '../repositories/creditTransaction.repository';
+import { Customer, CreditTransaction } from '../types/domain';
+import { ValidationError, NotFoundError } from '../types/errors';
 
-const TABLE = 'customers';
+const parseAmount = (value: unknown) =>
+  Number(parseFloat(String(value ?? 0)).toFixed(2));
 
-export const customerRepository = {
-  async findAll(): Promise<Customer[]> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    return (data ?? []).map(toCustomerDomain);
+export const customerService = {
+  async listAll(): Promise<Customer[]> {
+    return customerRepository.findAll();
   },
 
-  async findById(id: string): Promise<Customer | null> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .eq('id', id)
-      .maybeSingle();
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    return data ? toCustomerDomain(data) : null;
+  async findById(id: string): Promise<Customer> {
+    const customer = await customerRepository.findById(id);
+    if (!customer) throw new NotFoundError('Customer', id);
+    return customer;
   },
 
-  /**
-   * Busca cliente por nome (case-insensitive, partial match).
-   * Usa o índice GIN trigram (idx_customers_name_trgm) para performance.
-   *
-   * Ex: searchByName('jão') retorna 'João Silva', 'Jãozinho', etc.
-   */
-  async searchByName(query: string): Promise<Customer[]> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .ilike('name', `%${query}%`)
-      .order('name', { ascending: true })
-      .limit(50);
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    return (data ?? []).map(toCustomerDomain);
-  },
-
-  /**
-   * Lista clientes que têm dívida ativa (credit_used > 0).
-   * Útil pra tela de "Fiados em aberto" no painel admin.
-   */
-  async findWithCreditDebt(): Promise<Customer[]> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .gt('credit_used', 0)
-      .order('credit_used', { ascending: false });
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    return (data ?? []).map(toCustomerDomain);
-  },
-
-  /**
-   * Busca cliente pelo telefone (usado em pedidos públicos do cardápio online).
-   * Retorna null se não encontrar (não lança erro).
-   */
   async findByPhone(phone: string): Promise<Customer | null> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .eq('phone', phone)
-      .maybeSingle();
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    return data ? toCustomerDomain(data) : null;
+    return customerRepository.findByPhone(phone);
   },
 
-  async create(customer: Customer): Promise<Customer> {
-    const payload = toCustomerInsert(customer);
-    const { data, error } = await supabase
-      .from(TABLE)
-      .insert(payload)
-      .select()
-      .single();
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer', field: 'name' });
-    return toCustomerDomain(data);
+  async search(name: string): Promise<Customer[]> {
+    return customerRepository.searchByName(name);
   },
 
-  async update(id: string, patch: Partial<Customer>): Promise<Customer> {
-    const payload = toCustomerUpdate(patch);
+  async findWithDebt(): Promise<Customer[]> {
+    return customerRepository.findWithCreditDebt();
+  },
 
-    if (Object.keys(payload).length === 0) {
-      const current = await this.findById(id);
-      if (!current) throw new NotFoundError('Customer', id);
-      return current;
+  async create(input: {
+    name: string;
+    phone?: string | null;
+    email?: string | null;
+    address?: string | null;
+    creditLimit?: number;
+  }): Promise<Customer> {
+    return customerRepository.create({
+      id: createId(),
+      name: input.name,
+      phone: input.phone ?? null,
+      email: input.email ?? null,
+      address: input.address ?? null,
+      creditLimit: parseAmount(input.creditLimit ?? 0),
+      creditUsed: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  },
+
+  async update(
+    id: string,
+    input: {
+      name?: string;
+      phone?: string | null;
+      email?: string | null;
+      address?: string | null;
+      creditLimit?: number;
     }
-
-    const { data, error } = await supabase
-      .from(TABLE)
-      .update(payload)
-      .eq('id', id)
-      .select()
-      .maybeSingle();
-
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    if (!data) throw new NotFoundError('Customer', id);
-
-    return toCustomerDomain(data);
+  ): Promise<Customer> {
+    const patch: Partial<Customer> = {};
+    if (input.name !== undefined) patch.name = input.name;
+    if (input.phone !== undefined) patch.phone = input.phone;
+    if (input.email !== undefined) patch.email = input.email;
+    if (input.address !== undefined) patch.address = input.address;
+    if (input.creditLimit !== undefined) patch.creditLimit = parseAmount(input.creditLimit);
+    return customerRepository.update(id, patch);
   },
 
   async delete(id: string): Promise<void> {
-    const { error, count } = await supabase
-      .from(TABLE)
-      .delete({ count: 'exact' })
-      .eq('id', id);
+    return customerRepository.delete(id);
+  },
 
-    if (error) throw mapSupabaseError(error, { entity: 'Customer' });
-    if (count === 0) throw new NotFoundError('Customer', id);
+  async getTransactions(customerId: string): Promise<CreditTransaction[]> {
+    return creditTransactionRepository.findByCustomer(customerId);
+  },
+
+  async chargeCredit(
+    customerId: string,
+    amount: number,
+    description?: string | null
+  ): Promise<Customer> {
+    const chargeAmount = parseAmount(amount);
+    if (!chargeAmount || chargeAmount <= 0) {
+      throw new ValidationError('amount', 'Informe um valor valido para lancar no fiado.');
+    }
+    const customer = await customerRepository.findById(customerId);
+    if (!customer) throw new NotFoundError('Customer', customerId);
+    await creditTransactionRepository.chargeCredit(
+      customerId,
+      chargeAmount,
+      description ?? 'Lancamento manual no fiado'
+    );
+    return (await customerRepository.findById(customerId))!;
+  },
+
+  async payCredit(customerId: string, amount: number): Promise<Customer> {
+    const paidAmount = parseAmount(amount);
+    if (!paidAmount || paidAmount <= 0) {
+      throw new ValidationError('amount', 'Informe um valor valido para pagamento.');
+    }
+    const customer = await customerRepository.findById(customerId);
+    if (!customer) throw new NotFoundError('Customer', customerId);
+    await creditTransactionRepository.payCredit(
+      customerId,
+      Math.min(customer.creditUsed, paidAmount),
+      'Pagamento de fiado'
+    );
+    return (await customerRepository.findById(customerId))!;
   },
 };

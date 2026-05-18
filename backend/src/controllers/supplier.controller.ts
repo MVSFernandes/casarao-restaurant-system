@@ -1,87 +1,65 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { supplierService } from '../services/domain.services';
+import { DomainError } from '../types/errors';
 
-export const getSuppliers = async (req: Request, res: Response) => {
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  console.error(error);
+  return res.status(500).json({ message: fallback });
+};
+
+export const getSuppliers = async (_req: Request, res: Response) => {
   try {
-    const suppliers = await prisma.supplier.findMany({ orderBy: { name: 'asc' } });
-    res.json(suppliers);
+    res.json(await supplierService.listAll());
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar fornecedores' });
+    handleError(res, error, 'Erro ao buscar fornecedores');
   }
 };
 
 export const createSupplier = async (req: Request, res: Response) => {
   try {
     const { name, contact, phone, email } = req.body;
-    const supplier = await prisma.supplier.create({ data: { name, contact, phone, email } });
+    const supplier = await supplierService.create({ name, contact, phone, email });
     res.status(201).json(supplier);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao criar fornecedor' });
+    handleError(res, error, 'Erro ao criar fornecedor');
   }
 };
 
 export const updateSupplier = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const { name, contact, phone, email } = req.body;
-    const supplier = await prisma.supplier.update({ where: { id }, data: { name, contact, phone, email } });
+    const supplier = await supplierService.update(req.params.id, { name, contact, phone, email });
     res.json(supplier);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao atualizar fornecedor' });
+    handleError(res, error, 'Erro ao atualizar fornecedor');
   }
 };
 
 export const deleteSupplier = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    await prisma.supplier.delete({ where: { id } });
+    await supplierService.delete(req.params.id);
     res.status(204).send();
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao excluir fornecedor' });
+    handleError(res, error, 'Erro ao excluir fornecedor');
   }
 };
 
-export const getSupplierComparison = async (req: Request, res: Response) => {
+export const getSupplierComparison = async (_req: Request, res: Response) => {
   try {
-    const stockItems = await prisma.stockItem.findMany({
-      include: {
-        supplierLinks: {
-          include: { supplier: true }
-        }
-      }
-    });
-
-    const result = stockItems
-      .filter((item: any) => item.supplierLinks.length > 0)
-      .map((item: any) => {
-        const minPrice = Math.min(...item.supplierLinks.map((sp: any) => sp.price));
-        return {
-          ...item,
-          supplierPrices: item.supplierLinks.map((sp: any) => ({
-            supplierId: sp.supplierId,
-            supplierName: sp.supplier.name,
-            price: sp.price,
-            isCheapest: sp.price === minPrice,
-          }))
-        };
-      });
-
+    const result = await supplierService.getComparison();
     res.json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar comparação de fornecedores' });
+    handleError(res, error, 'Erro ao buscar comparação de fornecedores');
   }
 };
 
 export const upsertSupplierPrice = async (req: Request, res: Response) => {
   try {
     const { stockItemId, supplierId, price } = req.body;
-    const supplierPrice = await prisma.supplierStockItem.upsert({
-      where: { supplierId_stockItemId: { supplierId, stockItemId } },
-      create: { stockItemId, supplierId, price: parseFloat(price) },
-      update: { price: parseFloat(price) },
-    });
-    res.json(supplierPrice);
+    const result = await supplierService.upsertPrice({ stockItemId, supplierId, price });
+    res.json(result);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao registrar preço do fornecedor' });
+    handleError(res, error, 'Erro ao registrar preço do fornecedor');
   }
 };

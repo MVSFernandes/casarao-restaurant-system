@@ -1,48 +1,44 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { configService } from '../services/domain.services';
+import { DomainError } from '../types/errors';
 
-export const getConfig = async (req: Request, res: Response) => {
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  console.error(error);
+  return res.status(500).json({ message: fallback });
+};
+
+export const getConfig = async (_req: Request, res: Response) => {
   try {
-    let config = await prisma.restaurantConfig.findFirst();
-    if (!config) {
-      config = await prisma.restaurantConfig.create({
-        data: { name: 'Meu Restaurante' }
-      });
-    }
+    const config = await configService.get();
     res.json(config);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar configuracoes' });
+    handleError(res, error, 'Erro ao buscar configurações');
   }
 };
 
 export const updateConfig = async (req: Request, res: Response) => {
   try {
-    const { name, logoUrl, bannerUrl, address, phone, openingHours, openingDays, deliveryFee, urbanDeliveryFee, ruralDeliveryFee } = req.body;
+    const {
+      name, logoUrl, bannerUrl, address, phone,
+      openingHours, openingDays, deliveryFee,
+      urbanDeliveryFee, ruralDeliveryFee,
+    } = req.body;
 
-    let config = await prisma.restaurantConfig.findFirst();
-    if (!config) {
-      config = await prisma.restaurantConfig.create({
-        data: { name: name || 'Meu Restaurante' }
-      });
-    }
-
-    const updated = await prisma.restaurantConfig.update({
-      where: { id: config.id },
-      data: {
-        name,
-        logoUrl,
-        bannerUrl,
-        address,
-        phone,
-        openingHours,
-        openingDays,
-        deliveryFee: deliveryFee ? parseFloat(deliveryFee) : undefined,
-        urbanDeliveryFee: urbanDeliveryFee ? parseFloat(urbanDeliveryFee) : undefined,
-        ruralDeliveryFee: ruralDeliveryFee ? parseFloat(ruralDeliveryFee) : undefined
-      }
+    const config = await configService.update({
+      name,
+      logoUrl,
+      bannerUrl,
+      address,
+      phone,
+      openingHours,
+      openingDays,
+      deliveryFee: deliveryFee ? parseFloat(deliveryFee) : undefined,
+      urbanDeliveryFee: urbanDeliveryFee ? parseFloat(urbanDeliveryFee) : undefined,
+      ruralDeliveryFee: ruralDeliveryFee ? parseFloat(ruralDeliveryFee) : undefined,
     });
-    res.json(updated);
+    res.json(config);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao atualizar configuracoes' });
+    handleError(res, error, 'Erro ao atualizar configurações');
   }
 };

@@ -1,26 +1,19 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { productService } from '../services/domain.services';
+import { DomainError } from '../types/errors';
+
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  console.error(error);
+  return res.status(500).json({ message: fallback });
+};
 
 export const getLinksByProduct = async (req: Request, res: Response) => {
   try {
-    const { productId } = req.params;
-
-    const links = await prisma.productStockItem.findMany({
-      where: { productId },
-      include: {
-        stockItem: true,
-      },
-      orderBy: {
-        stockItem: {
-          name: 'asc',
-        },
-      },
-    });
-
+    const links = await productService.getLinks(req.params.productId);
     res.json(links);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar vínculos de estoque do produto.' });
+    handleError(res, error, 'Erro ao buscar vínculos de estoque do produto.');
   }
 };
 
@@ -28,59 +21,19 @@ export const replaceLinksByProduct = async (req: Request, res: Response) => {
   try {
     const { productId } = req.params;
     const { links } = req.body as {
-      links?: Array<{
-        stockItemId: string;
-        quantity: number;
-      }>;
+      links?: Array<{ stockItemId: string; quantity: number }>;
     };
 
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-    });
+    const result = await productService.replaceLinks(
+      productId,
+      (links || []).filter((l) => l.stockItemId && Number(l.quantity) > 0)
+        .map((l) => ({ stockItemId: l.stockItemId, quantity: Number(l.quantity) }))
+    );
 
-    if (!product) {
-      return res.status(404).json({ message: 'Produto não encontrado.' });
-    }
-
-    const normalizedLinks =
-      (links || [])
-        .filter((link) => link.stockItemId && Number(link.quantity) > 0)
-        .map((link) => ({
-          stockItemId: link.stockItemId,
-          quantity: Number(link.quantity),
-        }));
-
-    await prisma.$transaction(async (tx) => {
-      await tx.productStockItem.deleteMany({
-        where: { productId },
-      });
-
-      if (normalizedLinks.length > 0) {
-        await tx.productStockItem.createMany({
-          data: normalizedLinks.map((link) => ({
-            productId,
-            stockItemId: link.stockItemId,
-            quantity: link.quantity,
-          })),
-        });
-      }
-    });
-
-    const updatedLinks = await prisma.productStockItem.findMany({
-      where: { productId },
-      include: {
-        stockItem: true,
-      },
-      orderBy: {
-        stockItem: {
-          name: 'asc',
-        },
-      },
-    });
-
+    // Retorna os links atualizados para compatibilidade com o frontend
+    const updatedLinks = await productService.getLinks(productId);
     res.json(updatedLinks);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao salvar vínculos de estoque do produto.' });
+    handleError(res, error, 'Erro ao salvar vínculos de estoque do produto.');
   }
 };

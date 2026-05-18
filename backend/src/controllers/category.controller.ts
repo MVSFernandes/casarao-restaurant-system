@@ -1,73 +1,72 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { categoryService } from '../services/domain.services';
+import { DomainError } from '../types/errors';
+
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) {
+    return res.status(error.status).json({ message: error.message });
+  }
+  console.error(error);
+  return res.status(500).json({ message: fallback });
+};
 
 export const getCategories = async (req: Request, res: Response) => {
   try {
-    const { includeProducts } = req.query;
-    const categories = await prisma.category.findMany({
-      orderBy: { name: 'asc' },
-      include: includeProducts === 'true' ? { products: { orderBy: { name: 'asc' } } } : undefined,
-    });
+    const categories = await categoryService.listAll();
     res.json(categories);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar categorias' });
+    handleError(res, error, 'Erro ao buscar categorias');
   }
 };
 
 export const getCategoryById = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const category = await prisma.category.findUnique({
-      where: { id },
-      include: { products: true }
-    });
-    if (!category) return res.status(404).json({ message: 'Categoria não encontrada' });
+    const category = await categoryService.findById(req.params.id);
     res.json(category);
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao buscar categoria' });
+    handleError(res, error, 'Erro ao buscar categoria');
   }
 };
 
-const mapCategoryPayload = (body: any) => ({
-  name: body.name,
-  isMealCategory: !!body.isMealCategory,
-  pricePerKg:
-    body.pricePerKg !== undefined && body.pricePerKg !== null && body.pricePerKg !== ''
-      ? Number(body.pricePerKg)
-      : null,
-  selfServicePricePerKg:
-    body.selfServicePricePerKg !== undefined && body.selfServicePricePerKg !== null && body.selfServicePricePerKg !== ''
-      ? Number(body.selfServicePricePerKg)
-      : null,
-});
-
 export const createCategory = async (req: Request, res: Response) => {
   try {
-    const category = await prisma.category.create({ data: mapCategoryPayload(req.body) });
+    const { name, isMealCategory, pricePerKg, selfServicePricePerKg } = req.body;
+    const category = await categoryService.create({
+      name,
+      isMealCategory: !!isMealCategory,
+      pricePerKg: pricePerKg !== undefined && pricePerKg !== null && pricePerKg !== ''
+        ? Number(pricePerKg) : null,
+      selfServicePricePerKg: selfServicePricePerKg !== undefined && selfServicePricePerKg !== null && selfServicePricePerKg !== ''
+        ? Number(selfServicePricePerKg) : null,
+    });
     res.status(201).json(category);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao criar categoria' });
+    handleError(res, error, 'Erro ao criar categoria');
   }
 };
 
 export const updateCategory = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    const category = await prisma.category.update({ where: { id }, data: mapCategoryPayload(req.body) });
+    const { name, isMealCategory, pricePerKg, selfServicePricePerKg } = req.body;
+    const category = await categoryService.update(req.params.id, {
+      name,
+      isMealCategory: isMealCategory !== undefined ? !!isMealCategory : undefined,
+      pricePerKg: pricePerKg !== undefined && pricePerKg !== null && pricePerKg !== ''
+        ? Number(pricePerKg) : null,
+      selfServicePricePerKg: selfServicePricePerKg !== undefined && selfServicePricePerKg !== null && selfServicePricePerKg !== ''
+        ? Number(selfServicePricePerKg) : null,
+    });
     res.json(category);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao atualizar categoria' });
+    handleError(res, error, 'Erro ao atualizar categoria');
   }
 };
 
 export const deleteCategory = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    await prisma.category.delete({ where: { id } });
+    await categoryService.delete(req.params.id);
     res.status(204).send();
   } catch (error) {
-    res.status(500).json({ message: 'Erro ao excluir categoria' });
+    handleError(res, error, 'Erro ao excluir categoria');
   }
 };

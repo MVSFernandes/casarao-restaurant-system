@@ -1,89 +1,63 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { customerService } from '../services/customer.service';
+import { DomainError } from '../types/errors';
 
-const parseAmount = (value: unknown) => Number(parseFloat(String(value || 0)).toFixed(2));
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  console.error(error);
+  return res.status(500).json({ message: fallback });
+};
 
-export const getCustomers = async (req: Request, res: Response) => {
+export const getCustomers = async (_req: Request, res: Response) => {
   try {
-    const customers = await prisma.customer.findMany({
-      orderBy: { name: 'asc' },
-      include: {
-        creditTxs: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    res.json(customers);
+    const customers = await customerService.listAll();
+    // Enriquece com transações (compatibilidade frontend)
+    const enriched = await Promise.all(
+      customers.map(async (c) => ({
+        ...c,
+        creditTxs: await customerService.getTransactions(c.id),
+      }))
+    );
+    res.json(enriched);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar clientes' });
+    handleError(res, error, 'Erro ao buscar clientes');
   }
 };
 
 export const createCustomer = async (req: Request, res: Response) => {
   try {
     const { name, phone, email, address, creditLimit } = req.body;
-
-    const customer = await prisma.customer.create({
-      data: {
-        name,
-        phone: phone || null,
-        email: email || null,
-        address: address || null,
-        creditLimit: parseAmount(creditLimit),
-        creditUsed: 0,
-      },
-      include: {
-        creditTxs: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-
-    res.status(201).json(customer);
+    const customer = await customerService.create({ name, phone, email, address, creditLimit });
+    const creditTxs = await customerService.getTransactions(customer.id);
+    res.status(201).json({ ...customer, creditTxs });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao criar cliente' });
+    handleError(res, error, 'Erro ao criar cliente');
   }
 };
 
 export const updateCustomer = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const { name, phone, email, address, creditLimit } = req.body;
-
-    const customer = await prisma.customer.update({
-      where: { id },
-      data: {
-        name,
-        phone: phone || null,
-        email: email || null,
-        address: address || null,
-        creditLimit: creditLimit !== undefined ? parseAmount(creditLimit) : undefined,
-      },
-      include: {
-        creditTxs: {
-          orderBy: { createdAt: 'desc' },
-        },
-      },
+    const customer = await customerService.update(req.params.id, {
+      name,
+      phone: phone || null,
+      email: email || null,
+      address: address || null,
+      creditLimit,
     });
-
-    res.json(customer);
+    const creditTxs = await customerService.getTransactions(customer.id);
+    res.json({ ...customer, creditTxs });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao atualizar cliente' });
+    handleError(res, error, 'Erro ao atualizar cliente');
   }
 };
 
 export const deleteCustomer = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    await prisma.customer.delete({ where: { id } });
+    await customerService.delete(req.params.id);
     res.status(204).send();
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao excluir cliente' });
+    handleError(res, error, 'Erro ao excluir cliente');
   }
 };
 
@@ -91,48 +65,11 @@ export const addCreditCharge = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount, description } = req.body;
-
-    const chargeAmount = parseAmount(amount);
-
-    if (!chargeAmount || chargeAmount <= 0) {
-      return res.status(400).json({ message: 'Informe um valor válido para lançar no fiado.' });
-    }
-
-    const customer = await prisma.customer.findUnique({ where: { id } });
-
-    if (!customer) {
-      return res.status(404).json({ message: 'Cliente não encontrado' });
-    }
-
-    const updated = await prisma.$transaction(async (tx) => {
-      await tx.creditTransaction.create({
-        data: {
-          customerId: id,
-          type: 'CHARGE',
-          amount: chargeAmount,
-          description: description || 'Lançamento manual no fiado',
-        },
-      });
-
-      return tx.customer.update({
-        where: { id },
-        data: {
-          creditUsed: {
-            increment: chargeAmount,
-          },
-        },
-        include: {
-          creditTxs: {
-            orderBy: { createdAt: 'desc' },
-          },
-        },
-      });
-    });
-
-    return res.json(updated);
+    const customer = await customerService.chargeCredit(id, amount, description);
+    const creditTxs = await customerService.getTransactions(id);
+    res.json({ ...customer, creditTxs });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Erro ao lançar valor no fiado' });
+    handleError(res, error, 'Erro ao lançar valor no fiado');
   }
 };
 
@@ -140,49 +77,10 @@ export const payCredit = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount } = req.body;
-
-    const paidAmount = parseAmount(amount);
-
-    if (!paidAmount || paidAmount <= 0) {
-      return res.status(400).json({ message: 'Informe um valor válido para pagamento.' });
-    }
-
-    const customer = await prisma.customer.findUnique({ where: { id } });
-
-    if (!customer) {
-      return res.status(404).json({ message: 'Cliente não encontrado' });
-    }
-
-    const discountAmount = Math.min(customer.creditUsed, paidAmount);
-
-    const updated = await prisma.$transaction(async (tx) => {
-      await tx.creditTransaction.create({
-        data: {
-          customerId: id,
-          type: 'PAYMENT',
-          amount: discountAmount,
-          description: 'Pagamento de fiado',
-        },
-      });
-
-      return tx.customer.update({
-        where: { id },
-        data: {
-          creditUsed: {
-            decrement: discountAmount,
-          },
-        },
-        include: {
-          creditTxs: {
-            orderBy: { createdAt: 'desc' },
-          },
-        },
-      });
-    });
-
-    return res.json(updated);
+    const customer = await customerService.payCredit(id, amount);
+    const creditTxs = await customerService.getTransactions(id);
+    res.json({ ...customer, creditTxs });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Erro ao registrar pagamento de fiado' });
+    handleError(res, error, 'Erro ao registrar pagamento de fiado');
   }
 };

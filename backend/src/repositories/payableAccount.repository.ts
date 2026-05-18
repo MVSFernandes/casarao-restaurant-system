@@ -11,15 +11,16 @@ import { NotFoundError } from '../types/errors';
 const TABLE = 'payable_accounts';
 
 export const payableAccountRepository = {
-  async findAll(): Promise<PayableAccount[]> {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('*')
-      .order('due_date', { ascending: true });
+async findAll(): Promise<PayableAccount[]> {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('*')
+    .order('paid', { ascending: true })
+    .order('due_date', { ascending: true });
 
-    if (error) throw mapSupabaseError(error, { entity: 'PayableAccount' });
-    return (data ?? []).map(toPayableAccountDomain);
-  },
+  if (error) throw mapSupabaseError(error, { entity: 'PayableAccount' });
+  return (data ?? []).map(toPayableAccountDomain);
+},
 
   async findById(id: string): Promise<PayableAccount | null> {
     const { data, error } = await supabase

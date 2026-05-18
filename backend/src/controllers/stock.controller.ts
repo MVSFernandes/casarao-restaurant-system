@@ -1,125 +1,74 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma';
+import { stockService } from '../services/domain.services';
+import { DomainError } from '../types/errors';
 
-const getLowStockList = async () => {
-  const items = await prisma.stockItem.findMany({
-    orderBy: { name: 'asc' },
-  });
-
-  return items.filter((item) => Number(item.quantity) <= Number(item.minQuantity));
+const handleError = (res: Response, error: unknown, fallback: string) => {
+  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  console.error(error);
+  return res.status(500).json({ message: fallback });
 };
 
 const emitStockUpdate = async (req: Request) => {
   const io = req.app.get('io');
   if (!io) return;
-
-  const lowStockItems = await getLowStockList();
-
+  const lowStockItems = await stockService.findLowStock();
   io.emit('stock:updated');
   io.emit('stock:low', lowStockItems);
 };
 
 export const getStockItems = async (_req: Request, res: Response) => {
   try {
-    const items = await prisma.stockItem.findMany({
-      orderBy: { name: 'asc' },
-    });
-
-    res.json(items);
+    res.json(await stockService.listAll());
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar itens de estoque' });
+    handleError(res, error, 'Erro ao buscar itens de estoque');
   }
 };
 
 export const getStockItemById = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-
-    const item = await prisma.stockItem.findUnique({
-      where: { id },
-    });
-
-    if (!item) {
-      return res.status(404).json({ message: 'Item não encontrado' });
-    }
-
+    const item = await stockService.findById(req.params.id);
     res.json(item);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar item' });
+    handleError(res, error, 'Erro ao buscar item');
   }
 };
 
 export const getLowStockItems = async (_req: Request, res: Response) => {
   try {
-    const items = await getLowStockList();
-    res.json(items);
+    res.json(await stockService.findLowStock());
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao buscar itens com estoque baixo' });
+    handleError(res, error, 'Erro ao buscar itens com estoque baixo');
   }
 };
 
 export const createStockItem = async (req: Request, res: Response) => {
   try {
     const { name, quantity, unit, minQuantity } = req.body;
-
-    const item = await prisma.stockItem.create({
-      data: {
-        name,
-        quantity: parseFloat(quantity),
-        unit,
-        minQuantity: parseFloat(minQuantity || 0),
-      },
-    });
-
+    const item = await stockService.create({ name, quantity, unit, minQuantity });
     await emitStockUpdate(req);
-
     res.status(201).json(item);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao criar item de estoque' });
+    handleError(res, error, 'Erro ao criar item de estoque');
   }
 };
 
 export const updateStockItem = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
     const { name, quantity, unit, minQuantity } = req.body;
-
-    const item = await prisma.stockItem.update({
-      where: { id },
-      data: {
-        name,
-        quantity: quantity !== undefined ? parseFloat(quantity) : undefined,
-        unit,
-        minQuantity: minQuantity !== undefined ? parseFloat(minQuantity) : undefined,
-      },
-    });
-
+    const item = await stockService.update(req.params.id, { name, quantity, unit, minQuantity });
     await emitStockUpdate(req);
-
     res.json(item);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao atualizar item de estoque' });
+    handleError(res, error, 'Erro ao atualizar item de estoque');
   }
 };
 
 export const deleteStockItem = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-
-    await prisma.stockItem.delete({
-      where: { id },
-    });
-
+    await stockService.delete(req.params.id);
     await emitStockUpdate(req);
-
     res.status(204).send();
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Erro ao excluir item de estoque' });
+    handleError(res, error, 'Erro ao excluir item de estoque');
   }
 };
