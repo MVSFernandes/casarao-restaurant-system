@@ -89,13 +89,11 @@ export const getClosedOrdersHistory = async (req: Request, res: Response) => {
   try {
     const { startDate, endDate } = req.query;
 
-    // Busca sessões fechadas
     const sessions = await cashRegisterService.getHistory(30);
     const closed = sessions.filter((s) => s.status === 'CLOSED');
 
     const history = await Promise.all(
       closed.map(async (session) => {
-        // Filtra por data se fornecido
         if (startDate || endDate) {
           const sessionDate = session.openedAt;
           if (startDate && sessionDate < new Date(`${startDate}T00:00:00.000`)) return null;
@@ -105,11 +103,19 @@ export const getClosedOrdersHistory = async (req: Request, res: Response) => {
         const orders = await orderRepository.findBySession(session.id);
         const nonCanceled = orders.filter((o) => o.status !== 'CANCELED');
 
+        // Enriquece cada pedido com seus itens (frontend usa order.items.map)
+        const enrichedOrders = await Promise.all(
+          nonCanceled.map(async (o) => ({
+            ...o,
+            items: await orderRepository.findItems(o.id),
+          }))
+        );
+
         return {
           ...session,
-          matchedOrdersCount: nonCanceled.length,
-          totalOrdersInSession: nonCanceled.length,
-          orders: nonCanceled,
+          matchedOrdersCount: enrichedOrders.length,
+          totalOrdersInSession: enrichedOrders.length,
+          orders: enrichedOrders,
         };
       })
     );
