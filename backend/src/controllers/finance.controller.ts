@@ -70,7 +70,6 @@ export const getFinanceReports = async (req: Request, res: Response) => {
     const { period } = req.query;
     const { dates } = await financeService.getReport((period as any) || 'month');
 
-    // Chama a RPC finance_report do Supabase (substitui a lógica Prisma)
     const { data, error } = await supabase.rpc('finance_report', {
       p_start_date: dates.startDate,
       p_end_date: dates.endDate,
@@ -78,7 +77,29 @@ export const getFinanceReports = async (req: Request, res: Response) => {
 
     if (error) throw error;
 
-    res.json(data);
+    // Mapeia snake_case → camelCase para compatibilidade com o frontend
+    const mapped = {
+      totalRevenue: data.total_revenue ?? 0,
+      totalExpenses: data.total_expenses ?? 0,
+      totalWithdrawals: data.total_withdrawals ?? 0,
+      netProfit: data.net_profit ?? 0,
+      totalOrders: data.total_orders ?? 0,
+      topProducts: (data.top_products ?? []).map((p: any) => ({
+        productId: p.product_id,
+        name: p.name,
+        quantity: p.quantity,
+        revenue: p.revenue,
+      })),
+      topCustomers: (data.top_customers ?? []).map((c: any) => ({
+        customerId: c.customer_id,
+        name: c.name,
+        totalSpent: c.total_spent,
+        orderCount: c.order_count,
+      })),
+      paymentMethods: data.payment_methods ?? {},
+    };
+
+    res.json(mapped);
   } catch (error) {
     handleError(res, error, 'Erro ao gerar relatório');
   }
