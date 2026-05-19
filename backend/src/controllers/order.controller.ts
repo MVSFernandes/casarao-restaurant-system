@@ -19,25 +19,16 @@ const emitStockUpdate = async (req: Request) => {
   io.emit('stock:low', lowStockItems);
 };
 
-const enrichOrder = async (orderId: string) => {
-  const order = await orderRepository.findById(orderId);
-  if (!order) return null;
-  const items = await orderRepository.findItems(orderId);
-  return { ...order, items };
-};
-
 export const getOrders = async (req: Request, res: Response) => {
   try {
     const { tableId, status, myOrders, waiterId } = req.query;
     const user = (req as any).user;
 
-    // Verifica caixa aberto
     const session = await cashRegisterRepository.findOpenSession();
     if (!session) return res.json([]);
 
     let orders = await orderRepository.findBySession(session.id);
 
-    // Filtra status
     if (status) {
       const statuses = (status as string).split(',');
       orders = orders.filter((o) => statuses.includes(o.status));
@@ -50,7 +41,6 @@ export const getOrders = async (req: Request, res: Response) => {
     if (myOrders === 'true' && user?.id) orders = orders.filter((o) => o.waiterId === user.id);
     if (user?.role === 'WAITER' && user?.id) orders = orders.filter((o) => o.waiterId === user.id);
 
-    // Enriquece com itens
     const enriched = await Promise.all(
       orders.map(async (o) => ({ ...o, items: await orderRepository.findItems(o.id) }))
     );
@@ -63,9 +53,10 @@ export const getOrders = async (req: Request, res: Response) => {
 
 export const getOrderById = async (req: Request, res: Response) => {
   try {
-    const order = await enrichOrder(req.params.id);
+    const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
-    res.json(order);
+    const items = await orderRepository.findItems(order.id);
+    res.json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao buscar pedido');
   }
@@ -76,9 +67,10 @@ export const createOrder = async (req: Request, res: Response) => {
     const user = (req as any).user;
     const order = await orderService.createOrder(req.body, { id: user.id, role: user.role });
     await emitStockUpdate(req);
-    const enriched = await enrichOrder(order.id);
-    res.status(201).json(enriched);
+    const items = await orderRepository.findItems(order.id);
+    res.status(201).json({ ...order, items });
   } catch (error) {
+    console.error('CREATE ORDER ERROR:', error); // ← adiciona essa linha
     handleError(res, error, 'Erro ao criar pedido');
   }
 };
@@ -87,8 +79,8 @@ export const createPublicOrder = async (req: Request, res: Response) => {
   try {
     const order = await orderService.createPublicOrder(req.body);
     await emitStockUpdate(req);
-    const enriched = await enrichOrder(order.id);
-    res.status(201).json(enriched);
+    const items = await orderRepository.findItems(order.id);
+    res.status(201).json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao criar pedido público');
   }
@@ -103,8 +95,8 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       { id: user.id, role: user.role }
     );
     await emitStockUpdate(req);
-    const enriched = await enrichOrder(order.id);
-    res.json(enriched);
+    const items = await orderRepository.findItems(order.id);
+    res.json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao atualizar status do pedido');
   }
@@ -131,8 +123,8 @@ export const updateOrder = async (req: Request, res: Response) => {
       { id: user.id, role: user.role }
     );
     await emitStockUpdate(req);
-    const enriched = await enrichOrder(order.id);
-    res.json(enriched);
+    const items = await orderRepository.findItems(order.id);
+    res.json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao atualizar pedido');
   }
@@ -148,16 +140,17 @@ export const deleteOrder = async (req: Request, res: Response) => {
   }
 };
 
-// PDF — mantém PdfService legado (refatoração na Onda 7)
+// PDF
 import { PdfService } from '../services/pdf.service';
 import { restaurantConfigRepository } from '../repositories/restaurantConfig.repository';
 
 export const getOrderReceipt = async (req: Request, res: Response) => {
   try {
-    const order = await enrichOrder(req.params.id);
+    const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+    const items = await orderRepository.findItems(order.id);
     const config = await restaurantConfigRepository.get();
-    const pdfBuffer = await PdfService.generateOrderReceipt(order as any, config as any);
+    const pdfBuffer = await PdfService.generateOrderReceipt({ ...order, items } as any, config as any);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=pedido-${order.id.slice(-6)}.pdf`);
     return res.send(pdfBuffer);
@@ -169,13 +162,15 @@ export const getOrderReceipt = async (req: Request, res: Response) => {
 export const getCompanyReceipt = async (req: Request, res: Response) => {
   try {
     const { companyName, companyCnpj } = req.query;
-    const order = await enrichOrder(req.params.id);
+    const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
+    const items = await orderRepository.findItems(order.id);
     const config = await restaurantConfigRepository.get();
-    const pdfBuffer = await PdfService.generateCompanyReceipt(order as any, config as any, {
-      name: (companyName as string) || 'N/A',
-      cnpj: (companyCnpj as string) || 'N/A',
-    });
+    const pdfBuffer = await PdfService.generateCompanyReceipt(
+      { ...order, items } as any,
+      config as any,
+      { name: (companyName as string) || 'N/A', cnpj: (companyCnpj as string) || 'N/A' }
+    );
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=recibo-empresa-${order.id.slice(-6)}.pdf`);
     return res.send(pdfBuffer);

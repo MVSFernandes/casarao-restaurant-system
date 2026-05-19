@@ -135,7 +135,7 @@ export const orderRepository = {
    * items = [{ stock_item_id: string, quantity: number }]
    * Chamada ao confirmar/iniciar produção do pedido.
    */
-  async consumeStock(items: { stock_item_id: string; quantity: number }[]): Promise<void> {
+  async consumeStock(items: { product_id: string; quantity: number; weight?: number | null }[]): Promise<void> {
     const { error } = await supabase.rpc('consume_order_stock', {
       p_items: items,
     });
@@ -147,7 +147,7 @@ export const orderRepository = {
    * items = [{ stock_item_id: string, quantity: number }]
    * Chamada ao cancelar o pedido.
    */
-  async restoreStock(items: { stock_item_id: string; quantity: number }[]): Promise<void> {
+  async restoreStock(items: { product_id: string; quantity: number; weight?: number | null }[]): Promise<void> {
     const { error } = await supabase.rpc('restore_order_stock', {
       p_items: items,
     });

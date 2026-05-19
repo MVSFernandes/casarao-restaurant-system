@@ -1,8 +1,5 @@
 import { Request, Response } from 'express';
-import { AuthService } from '../services/auth.service';
-import { UserRepository } from '../repositories/user.repository';
-
-const authService = new AuthService(new UserRepository());
+import { authService } from '../services/auth.service';
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -18,7 +15,7 @@ export const login = async (req: Request, res: Response) => {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
       path: '/api/auth/refresh-token',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     res.json({ accessToken, user });
@@ -33,35 +30,23 @@ export const refreshToken = async (req: Request, res: Response) => {
     if (!refreshToken) {
       return res.status(401).json({ message: 'Refresh token not found' });
     }
-
     const { accessToken } = await authService.refreshToken(refreshToken);
-
     res.json({ accessToken });
   } catch (error: any) {
     res.status(401).json({ message: error.message });
   }
 };
 
-export const logout = (req: Request, res: Response) => {
+export const logout = (_req: Request, res: Response) => {
   res.clearCookie('refreshToken', { path: '/api/auth/refresh-token' });
   res.status(200).json({ message: 'Logged out successfully' });
 };
 
 export const getMe = async (req: Request, res: Response) => {
   try {
-    // The user object is attached to the request by the authMiddleware
     const user = (req as any).user;
-    if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-    }
-
-    // We can fetch the user again to get the most up-to-date info if needed
-    const currentUser = await new UserRepository().findById(user.id);
-
-    if (!currentUser) {
-        return res.status(404).json({ message: 'User not found' });
-    }
-
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    const currentUser = await authService.getMe(user.id);
     res.json(currentUser);
   } catch (error: any) {
     res.status(500).json({ message: 'Internal server error' });

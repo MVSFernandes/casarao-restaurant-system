@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
-import { prisma } from '../lib/prisma';
+import { userRepository } from '../repositories/user.repository';
+import { createId } from '@paralleldrive/cuid2';
 
 const router = Router();
 
@@ -11,23 +12,22 @@ router.get('/', authorize('ADMIN'), async (req, res) => {
   try {
     const { role, search } = req.query;
 
-    const users = await prisma.user.findMany({
-      where: {
-        ...(role ? { role: String(role) } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: String(search) } },
-                { email: { contains: String(search) } },
-              ],
-            }
-          : {}),
-      },
-      select: { id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true },
-      orderBy: { name: 'asc' },
-    });
+    let users = await userRepository.findAll();
 
-    res.json(users);
+    if (role) {
+      users = users.filter((u) => u.role === String(role));
+    }
+
+    if (search) {
+      const q = String(search).toLowerCase();
+      users = users.filter(
+        (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      );
+    }
+
+    // Remove senha da resposta
+    const safe = users.map(({ password: _, ...u }) => u);
+    res.json(safe);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Erro ao buscar usuários' });
@@ -46,24 +46,25 @@ router.post('/', authorize('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Perfil inválido' });
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
+    const existing = await userRepository.findByEmail(email);
+    if (existing) {
       return res.status(409).json({ message: 'Já existe um usuário com este email' });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        role,
-      },
-      select: { id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true },
+    const user = await userRepository.create({
+      id: createId(),
+      name,
+      email,
+      password: hashedPassword,
+      role,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
-    res.status(201).json(user);
+    const { password: _, ...safe } = user;
+    res.status(201).json(safe);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Erro ao criar usuário' });
@@ -83,33 +84,27 @@ router.put('/:id', authorize('ADMIN'), async (req, res) => {
       return res.status(400).json({ message: 'Perfil inválido' });
     }
 
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        email,
-        NOT: { id },
-      },
-    });
-
-    if (existingUser) {
+    // Verifica duplicidade de email
+    const existing = await userRepository.findByEmail(email);
+    if (existing && existing.id !== id) {
       return res.status(409).json({ message: 'Já existe um usuário com este email' });
     }
 
-    const data: { name: string; email: string; role: string; password?: string } = { name, email, role };
+    const patch: { name: string; email: string; role: string; password?: string } = {
+      name, email, role,
+    };
+    const typedPatch = patch as any;
 
     if (password && String(password).trim().length > 0) {
       if (String(password).trim().length < 4) {
         return res.status(400).json({ message: 'A senha deve ter no mínimo 4 caracteres' });
       }
-      data.password = await bcrypt.hash(String(password), 10);
+      patch.password = await bcrypt.hash(String(password), 10);
     }
 
-    const user = await prisma.user.update({
-      where: { id },
-      data,
-      select: { id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true },
-    });
-
-    res.json(user);
+    const user = await userRepository.update(id, typedPatch);
+    const { password: _, ...safe } = user;
+    res.json(safe);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Erro ao atualizar usuário' });
@@ -120,32 +115,25 @@ router.delete('/:id', authorize('ADMIN'), async (req, res) => {
   try {
     const { id } = req.params;
 
-    const userWithRelations = await prisma.user.findUnique({
-      where: { id },
-      include: {
-        orders: { select: { id: true }, take: 1 },
-        waiterOrders: { select: { id: true }, take: 1 },
-        auditLogs: { select: { id: true }, take: 1 },
-      },
-    });
-
-    if (!userWithRelations) {
+    const user = await userRepository.findById(id);
+    if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
 
-    const hasLinkedRecords =
-      userWithRelations.orders.length > 0 ||
-      userWithRelations.waiterOrders.length > 0 ||
-      userWithRelations.auditLogs.length > 0;
+    // Verifica se tem pedidos vinculados
+    const { supabase } = await import('../lib/supabase');
+    const { count: orderCount } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .or(`user_id.eq.${id},waiter_id.eq.${id}`);
 
-    if (hasLinkedRecords) {
+    if (orderCount && orderCount > 0) {
       return res.status(400).json({
         message: 'Este usuário já possui histórico no sistema e não pode ser excluído. Edite o cadastro em vez de excluir.',
       });
     }
 
-    await prisma.user.delete({ where: { id } });
-
+    await userRepository.delete(id);
     res.status(204).send();
   } catch (error) {
     console.error(error);
