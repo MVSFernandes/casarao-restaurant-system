@@ -1,35 +1,7 @@
 // ============================================================================
-// Repository de USERS
-//
-// Esta arquivo contém DUAS implementações em paralelo durante a migração
-// Prisma → Supabase:
-//
-//   1. UserRepository (LEGACY — Prisma) — usado pelos controllers antigos
-//      (auth.controller.ts, auth.service.ts).
-//      SERÁ REMOVIDO na Onda 6, quando os controllers forem refatorados.
-//
-//   2. userRepository (NEW — Supabase) — usado pelos services novos
-//      (a partir da Onda 5).
-//
-// Após a Onda 6 estar concluída e os controllers refatorados, o bloco LEGACY
-// abaixo será deletado.
+// Repository de USERS — Supabase (migração Prisma → Supabase concluída)
 // ============================================================================
 
-// ----- LEGACY: Prisma (será removido na Onda 6) -----
-import { PrismaClient, User as PrismaUser } from '@prisma/client';
-const prisma = new PrismaClient();
-
-export class UserRepository {
-  async findByEmail(email: string): Promise<PrismaUser | null> {
-    return prisma.user.findUnique({ where: { email } });
-  }
-
-  async findById(id: string): Promise<PrismaUser | null> {
-    return prisma.user.findUnique({ where: { id } });
-  }
-}
-
-// ----- NEW: Supabase (a partir da Onda 5) -----
 import { supabase } from '../lib/supabase';
 import { User } from '../types/domain';
 import { mapSupabaseError } from '../middlewares/errorHandler.middleware';

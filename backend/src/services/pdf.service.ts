@@ -1,15 +1,18 @@
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
-import { Order, OrderItem, Product, Table, User, RestaurantConfig } from '@prisma/client';
+import { Order, OrderItem, Product, Table, User, RestaurantConfig } from '../types/domain';
 
+// Tipos locais para o PDF — usa domain.ts em vez de @prisma/client
 type OrderWithDetails = Order & {
-  items: (OrderItem & { product: Product })[];
+  items: (OrderItem & { product: Product | null })[];
   table?: Table | null;
   waiter?: User | null;
 };
 
+type ConfigForPdf = Pick<RestaurantConfig, 'name' | 'address' | 'phone'>;
+
 export class PdfService {
-  static async generateOrderReceipt(order: OrderWithDetails, config: RestaurantConfig): Promise<Buffer> {
+  static async generateOrderReceipt(order: OrderWithDetails, config: ConfigForPdf): Promise<Buffer> {
     let estimatedHeight = 60 + (order.items.length * 15);
     order.items.forEach(item => {
       if (item.notes) {
@@ -90,9 +93,9 @@ export class PdfService {
     doc.setFont('helvetica', 'normal');
 
     order.items.forEach((item) => {
-      const name = item.product.name;
+      const name = item.product?.name ?? 'Produto';
       const qty = item.weight ? `${(item.weight / 1000).toFixed(3)}kg` : `${item.quantity}x`;
-      const price = `R$ ${item.price.toFixed(2)}`;
+      const price = `R$ ${Number(item.price).toFixed(2)}`;
 
       doc.text(name, margin, y, { maxWidth: 35 });
       doc.text(qty, 45, y);
@@ -124,7 +127,7 @@ export class PdfService {
     doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text('TOTAL:', margin, y);
-    doc.text(`R$ ${order.total.toFixed(2)}`, 75, y, { align: 'right' });
+    doc.text(`R$ ${Number(order.total).toFixed(2)}`, 75, y, { align: 'right' });
 
     y += 10;
     doc.setFontSize(8);
@@ -136,7 +139,7 @@ export class PdfService {
 
   static async generateCompanyReceipt(
     order: OrderWithDetails,
-    config: RestaurantConfig,
+    config: ConfigForPdf,
     companyData: { name: string; cnpj: string }
   ): Promise<Buffer> {
     const doc = new jsPDF() as any;
@@ -168,7 +171,7 @@ export class PdfService {
 
     y += 20;
     doc.setFont('helvetica', 'bold');
-    doc.text(`VALOR TOTAL: R$ ${order.total.toFixed(2)}`, 20, y);
+    doc.text(`VALOR TOTAL: R$ ${Number(order.total).toFixed(2)}`, 20, y);
 
     y += 10;
     doc.setFont('helvetica', 'normal');
