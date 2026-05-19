@@ -4,6 +4,18 @@ import { orderRepository } from '../repositories/order.repository';
 import { cashRegisterRepository } from '../repositories/cashRegister.repository';
 import { stockService } from '../services/domain.services';
 import { DomainError } from '../types/errors';
+import { productRepository } from '../repositories/product.repository';
+
+// Helper: busca itens do pedido com produto aninhado
+async function getItemsWithProduct(orderId: string) {
+  const items = await orderRepository.findItems(orderId);
+  return Promise.all(
+    items.map(async (item) => ({
+      ...item,
+      product: await productRepository.findById(item.productId),
+    }))
+  );
+}
 
 const handleError = (res: Response, error: unknown, fallback: string) => {
   if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
@@ -42,7 +54,16 @@ export const getOrders = async (req: Request, res: Response) => {
     if (user?.role === 'WAITER' && user?.id) orders = orders.filter((o) => o.waiterId === user.id);
 
     const enriched = await Promise.all(
-      orders.map(async (o) => ({ ...o, items: await orderRepository.findItems(o.id) }))
+      orders.map(async (o) => {
+        const items = await orderRepository.findItems(o.id);
+        const itemsWithProduct = await Promise.all(
+          items.map(async (item) => {
+            const product = await productRepository.findById(item.productId);
+            return { ...item, product };
+          })
+        );
+        return { ...o, items: itemsWithProduct };
+      })
     );
 
     res.json(enriched);
@@ -55,7 +76,7 @@ export const getOrderById = async (req: Request, res: Response) => {
   try {
     const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     res.json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao buscar pedido');
@@ -67,7 +88,7 @@ export const createOrder = async (req: Request, res: Response) => {
     const user = (req as any).user;
     const order = await orderService.createOrder(req.body, { id: user.id, role: user.role });
     await emitStockUpdate(req);
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     res.status(201).json({ ...order, items });
   } catch (error) {
     console.error('CREATE ORDER ERROR:', error); // ← adiciona essa linha
@@ -79,7 +100,7 @@ export const createPublicOrder = async (req: Request, res: Response) => {
   try {
     const order = await orderService.createPublicOrder(req.body);
     await emitStockUpdate(req);
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     res.status(201).json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao criar pedido público');
@@ -95,7 +116,7 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
       { id: user.id, role: user.role }
     );
     await emitStockUpdate(req);
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     res.json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao atualizar status do pedido');
@@ -123,7 +144,7 @@ export const updateOrder = async (req: Request, res: Response) => {
       { id: user.id, role: user.role }
     );
     await emitStockUpdate(req);
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     res.json({ ...order, items });
   } catch (error) {
     handleError(res, error, 'Erro ao atualizar pedido');
@@ -148,7 +169,7 @@ export const getOrderReceipt = async (req: Request, res: Response) => {
   try {
     const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     const config = await restaurantConfigRepository.get();
     const pdfBuffer = await PdfService.generateOrderReceipt({ ...order, items } as any, config as any);
     res.setHeader('Content-Type', 'application/pdf');
@@ -164,7 +185,7 @@ export const getCompanyReceipt = async (req: Request, res: Response) => {
     const { companyName, companyCnpj } = req.query;
     const order = await orderRepository.findById(req.params.id);
     if (!order) return res.status(404).json({ message: 'Pedido não encontrado' });
-    const items = await orderRepository.findItems(order.id);
+    const items = await getItemsWithProduct(order.id);
     const config = await restaurantConfigRepository.get();
     const pdfBuffer = await PdfService.generateCompanyReceipt(
       { ...order, items } as any,

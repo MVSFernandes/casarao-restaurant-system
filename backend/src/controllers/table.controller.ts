@@ -53,7 +53,25 @@ export const createTable = async (req: Request, res: Response) => {
 
 export const updateTableStatus = async (req: Request, res: Response) => {
   try {
-    const table = await tableService.updateStatus(req.params.id, req.body.status);
+    const { status } = req.body;
+
+    // Não permite fechar mesa com pedidos ativos
+    if (status === 'CLOSED' || status === 'AVAILABLE') {
+      const activeOrders = await orderRepository.findByStatus('NEW');
+      const inProgress = await orderRepository.findByStatus('IN_PROGRESS');
+      const ready = await orderRepository.findByStatus('READY');
+
+      const allActive = [...activeOrders, ...inProgress, ...ready];
+      const hasActiveOrder = allActive.some((o) => o.tableId === req.params.id);
+
+      if (hasActiveOrder) {
+        return res.status(400).json({
+          message: 'Não é possível fechar a mesa. Existe um pedido ativo vinculado a ela. Finalize ou cancele o pedido primeiro.',
+        });
+      }
+    }
+
+    const table = await tableService.updateStatus(req.params.id, status);
     res.json(table);
   } catch (error) {
     handleError(res, error, 'Erro ao atualizar status da mesa');

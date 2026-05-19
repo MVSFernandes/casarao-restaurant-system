@@ -29,7 +29,7 @@ const navItems: NavItem[] = [
     ]
   },
   {
-    label: 'Mesas', path: '/waiter', icon: <Users size={20} />,
+    label: 'Mesas Garçom ', path: '/waiter', icon: <Users size={20} />,
     roles: ['ADMIN', 'WAITER'],
     children: [
       { label: 'Minhas Mesas', path: '/waiter/tables', icon: null },
