@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import {
+  AlertCircle,
   Check,
   ChevronDown,
   ChevronRight,
@@ -21,6 +22,12 @@ import api from '../../services/api';
 import type { CreditEntry, Customer } from '../../types';
 
 type FilterMode = 'all' | 'open' | 'paid';
+
+type NoticeState = {
+  title: string;
+  message: string;
+  variant?: 'error' | 'info';
+};
 
 const emptyForm = {
   name: '',
@@ -204,6 +211,13 @@ const CreditPage: React.FC = () => {
   const [chargeDescription, setChargeDescription] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [invoiceLoadingId, setInvoiceLoadingId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
+  const [missingPhoneCustomer, setMissingPhoneCustomer] = useState<Customer | null>(null);
+  const [missingPhone, setMissingPhone] = useState('');
+
+  const showError = (message: string, title = 'Não foi possível concluir') => {
+    setNotice({ title, message, variant: 'error' });
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -211,7 +225,7 @@ const CreditPage: React.FC = () => {
       setCustomers(data);
     } catch (error) {
       console.error(error);
-      alert('Não foi possível carregar o fiado.');
+      showError('Não foi possível carregar o fiado.');
     } finally {
       setLoading(false);
     }
@@ -326,7 +340,7 @@ const CreditPage: React.FC = () => {
       fetchCustomers();
     } catch (error) {
       console.error(error);
-      alert('Não foi possível salvar o cliente.');
+      showError('Não foi possível salvar o cliente.');
     }
   };
 
@@ -343,7 +357,7 @@ const CreditPage: React.FC = () => {
       fetchCustomers();
     } catch (error) {
       console.error(error);
-      alert('Não foi possível registrar o pagamento.');
+      showError('Não foi possível registrar o pagamento.');
     }
   };
 
@@ -362,7 +376,7 @@ const CreditPage: React.FC = () => {
       fetchCustomers();
     } catch (error) {
       console.error(error);
-      alert('Não foi possível lançar no fiado.');
+      showError('Não foi possível lançar no fiado.');
     }
   };
 
@@ -376,7 +390,7 @@ const CreditPage: React.FC = () => {
       fetchCustomers();
     } catch (error) {
       console.error(error);
-      alert('Não foi possível excluir o cliente.');
+      showError('Não foi possível excluir o cliente.');
     } finally {
       setDeleteLoading(false);
     }
@@ -398,11 +412,37 @@ const CreditPage: React.FC = () => {
   const openWhatsApp = (customer: Customer) => {
     const phone = formatPhoneForWhatsApp(customer.phone);
     if (!phone) {
-      alert('Esse cliente não possui telefone cadastrado.');
+      setMissingPhoneCustomer(customer);
+      setMissingPhone('');
       return;
     }
 
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(buildWhatsAppMessage(customer))}`, '_blank');
+  };
+
+  const handleSaveMissingPhone = async () => {
+    if (!missingPhoneCustomer) return;
+
+    const phone = digitsOnly(missingPhone);
+    if (!phone) {
+      showError('Informe um telefone para continuar.', 'Telefone obrigatório');
+      return;
+    }
+
+    try {
+      await api.put(`/customers/${missingPhoneCustomer.id}`, { phone: missingPhone });
+      const updatedCustomer = { ...missingPhoneCustomer, phone: missingPhone };
+      setMissingPhoneCustomer(null);
+      setMissingPhone('');
+      fetchCustomers();
+      window.open(
+        `https://wa.me/${formatPhoneForWhatsApp(phone)}?text=${encodeURIComponent(buildWhatsAppMessage(updatedCustomer))}`,
+        '_blank'
+      );
+    } catch (error) {
+      console.error(error);
+      showError('Não foi possível salvar o telefone do cliente.');
+    }
   };
 
   const toggleRow = (id: string) => {
@@ -421,7 +461,7 @@ const CreditPage: React.FC = () => {
       fetchCustomers();
     } catch (error: any) {
       console.error(error);
-      alert(error?.response?.data?.message || 'Não foi possível emitir a NF-e.');
+      showError(error?.response?.data?.message || 'Não foi possível emitir a NF-e.', 'Erro ao emitir NF-e');
     } finally {
       setInvoiceLoadingId(null);
     }
@@ -712,9 +752,93 @@ const CreditPage: React.FC = () => {
           </div>
         </ModalFrame>
       )}
+
+      {missingPhoneCustomer && (
+        <ModalFrame
+          title="Cadastrar telefone"
+          onClose={() => {
+            setMissingPhoneCustomer(null);
+            setMissingPhone('');
+          }}
+          maxWidth="max-w-md"
+        >
+          <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
+            <div className="flex items-start gap-3">
+              <MessageCircle size={20} className="mt-0.5 flex-none text-[#ea580c]" />
+              <div>
+                <p className="text-sm font-semibold text-[#9a3412]">
+                  {missingPhoneCustomer.name} ainda não tem telefone cadastrado.
+                </p>
+                <p className="mt-1 text-sm text-[#c2410c]">
+                  Cadastre o telefone para enviar a cobrança pelo WhatsApp.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Field
+            label="Telefone"
+            value={missingPhone}
+            onChange={setMissingPhone}
+            placeholder="Ex.: (11) 98765-4321"
+          />
+
+          <div className="mt-5 flex gap-3">
+            <button onClick={handleSaveMissingPhone} className="btn-primary flex-1">
+              Salvar e cobrar
+            </button>
+            <button
+              onClick={() => {
+                setMissingPhoneCustomer(null);
+                setMissingPhone('');
+                openEditCustomerModal(missingPhoneCustomer);
+              }}
+              className="btn-secondary flex-1"
+            >
+              Cadastro completo
+            </button>
+          </div>
+        </ModalFrame>
+      )}
+
+      {notice && (
+        <NoticeModal notice={notice} onClose={() => setNotice(null)} />
+      )}
     </div>
   );
 };
+
+const NoticeModal: React.FC<{
+  notice: NoticeState;
+  onClose: () => void;
+}> = ({ notice, onClose }) => (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+    <div className="w-full max-w-md overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-2xl">
+      <div className="flex items-start gap-3 px-5 py-5">
+        <div
+          className={clsx(
+            'mt-0.5 flex h-10 w-10 flex-none items-center justify-center rounded-lg',
+            notice.variant === 'error' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'
+          )}
+        >
+          <AlertCircle size={21} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-bold text-[#0f172a]">{notice.title}</h3>
+          <p className="mt-1 text-sm leading-relaxed text-[#64748b]">{notice.message}</p>
+        </div>
+      </div>
+      <div className="flex justify-end border-t border-slate-100 bg-slate-50 px-5 py-3">
+        <button
+          onClick={onClose}
+          className="rounded-lg bg-[#ea580c] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#c2410c]"
+        >
+          Entendi
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const KpiCard: React.FC<{
   icon: React.ReactNode;
