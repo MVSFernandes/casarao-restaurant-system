@@ -935,6 +935,8 @@ const CustomerCard: React.FC<{
 }) => {
   const openRows = customer.openRows ?? [];
   const paidRows = customer.paidRows ?? [];
+  const paidTotal = paidRows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const isSettled = openRows.length === 0 && paidRows.length > 0;
   const usagePercent = customer.creditLimit > 0
     ? Math.min((customer.creditUsed / customer.creditLimit) * 100, 100)
     : 0;
@@ -953,6 +955,13 @@ const CustomerCard: React.FC<{
             <span className={clsx('rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-[0.05em]', personBadgeClass)}>
               {personType}
             </span>
+            {isSettled && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg border border-[#bbf7d0] bg-[#dcfce7] px-2.5 py-1 text-[11px] font-semibold text-[#16a34a]">
+                <Check size={12} />
+                Tudo pago
+                <span className="tabular-nums text-[#15803d]">{formatMoney(paidTotal)}</span>
+              </span>
+            )}
           </div>
           <div className="mt-1 text-[13px] tabular-nums text-[#94a3b8]">
             {[customer.phone, customer.document ? `${personType === 'PJ' ? 'CNPJ' : 'CPF'} ${formatDocument(customer.document)}` : null]
@@ -1000,44 +1009,48 @@ const CustomerCard: React.FC<{
       </div>
 
       <div className="mt-[22px]">
-        <div className="mb-2.5 flex items-center gap-2">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[#94a3b8]">Em aberto</span>
-          <span className="text-[11px] tabular-nums text-[#cbd5e1]">{openRows.length}</span>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          {openRows.length === 0 && (
-            <div className="rounded-[10px] border border-dashed border-[#e2e8f0] px-3.5 py-3 text-sm text-[#94a3b8]">
-              Nenhum lançamento em aberto.
+        {openRows.length > 0 ? (
+          <>
+            <div className="mb-2.5 flex items-center gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[#94a3b8]">Em aberto</span>
+              <span className="text-[11px] tabular-nums text-[#cbd5e1]">{openRows.length}</span>
             </div>
-          )}
 
-          {openRows.map((row) => (
-            <CreditRow
-              key={row.id}
-              customer={customer}
-              row={row}
-              expanded={expandedRows.has(row.id)}
-              onToggle={() => onToggleRow(row.id)}
-              onPay={() => onPay(row)}
-              onWhatsApp={onWhatsApp}
-              onIssueInvoice={() => onIssueInvoice(row)}
-              invoiceLoading={invoiceLoadingId === row.id}
-            />
-          ))}
-        </div>
+            <div className="flex flex-col gap-2">
+              {openRows.map((row) => (
+                <CreditRow
+                  key={row.id}
+                  customer={customer}
+                  row={row}
+                  expanded={expandedRows.has(row.id)}
+                  onToggle={() => onToggleRow(row.id)}
+                  onPay={() => onPay(row)}
+                  onWhatsApp={onWhatsApp}
+                  onIssueInvoice={() => onIssueInvoice(row)}
+                  invoiceLoading={invoiceLoadingId === row.id}
+                />
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-[10px] border border-[#bbf7d0] bg-[#f0fdf4] px-3.5 py-3 text-sm text-[#15803d]">
+            Cliente sem lançamentos em aberto.
+          </div>
+        )}
 
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={onCharge} className="rounded-lg border border-[#cbd5e1] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1e293b] hover:bg-slate-50">
             Lançar fiado
           </button>
-          <button
-            onClick={() => onPay()}
-            disabled={customer.creditUsed <= 0}
-            className="rounded-lg border border-[#cbd5e1] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1e293b] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Registrar pagamento
-          </button>
+          {openRows.length > 0 && (
+            <button
+              onClick={() => onPay()}
+              disabled={customer.creditUsed <= 0}
+              className="rounded-lg border border-[#cbd5e1] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1e293b] hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Registrar pagamento
+            </button>
+          )}
         </div>
 
         <div className="mt-5">
