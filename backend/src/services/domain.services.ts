@@ -91,6 +91,10 @@ export const productService = {
     categoryId: string;
     imageUrl?: string | null;
     isByWeight?: boolean;
+    ncm?: string | null;
+    cfop?: string | null;
+    origin?: string | null;
+    taxCode?: string | null;
   }): Promise<Product> {
     return productRepository.create({
       id: createId(),
@@ -100,6 +104,10 @@ export const productService = {
       categoryId: input.categoryId,
       imageUrl: input.imageUrl ?? null,
       isByWeight: input.isByWeight ?? false,
+      ncm: input.ncm ?? null,
+      cfop: input.cfop ?? null,
+      origin: input.origin ?? null,
+      taxCode: input.taxCode ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -389,6 +397,21 @@ export const configService = {
     deliveryFee?: number | null;
     urbanDeliveryFee?: number | null;
     ruralDeliveryFee?: number | null;
+    cnpj?: string | null;
+    legalName?: string | null;
+    stateRegistration?: string | null;
+    taxRegime?: string | null;
+    fiscalCityIbgeCode?: string | null;
+    fiscalZipCode?: string | null;
+    fiscalStreet?: string | null;
+    fiscalNumber?: string | null;
+    fiscalNeighborhood?: string | null;
+    fiscalCity?: string | null;
+    fiscalState?: string | null;
+    defaultCfop?: string | null;
+    defaultNcm?: string | null;
+    defaultOrigin?: string | null;
+    defaultTaxCode?: string | null;
   }) {
     const config = await restaurantConfigRepository.get();
     return restaurantConfigRepository.update(config.id, {
@@ -402,6 +425,21 @@ export const configService = {
       deliveryFee: input.deliveryFee != null ? parseFloat(String(input.deliveryFee)) : undefined,
       urbanDeliveryFee: input.urbanDeliveryFee != null ? parseFloat(String(input.urbanDeliveryFee)) : undefined,
       ruralDeliveryFee: input.ruralDeliveryFee != null ? parseFloat(String(input.ruralDeliveryFee)) : undefined,
+      cnpj: input.cnpj,
+      legalName: input.legalName,
+      stateRegistration: input.stateRegistration,
+      taxRegime: input.taxRegime,
+      fiscalCityIbgeCode: input.fiscalCityIbgeCode,
+      fiscalZipCode: input.fiscalZipCode,
+      fiscalStreet: input.fiscalStreet,
+      fiscalNumber: input.fiscalNumber,
+      fiscalNeighborhood: input.fiscalNeighborhood,
+      fiscalCity: input.fiscalCity,
+      fiscalState: input.fiscalState,
+      defaultCfop: input.defaultCfop,
+      defaultNcm: input.defaultNcm,
+      defaultOrigin: input.defaultOrigin,
+      defaultTaxCode: input.defaultTaxCode,
     });
   },
 };

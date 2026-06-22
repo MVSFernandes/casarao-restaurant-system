@@ -42,6 +42,14 @@ export type PaymentStatus = 'PENDING' | 'PAID' | 'REFUNDED';
 
 export type CreditTransactionType = 'CHARGE' | 'PAYMENT';
 
+export type CreditTransactionStatus = 'OPEN' | 'PARTIAL' | 'PAID';
+
+export type PersonType = 'PF' | 'PJ';
+
+export type InvoiceEnvironment = 'homologation' | 'production';
+
+export type InvoiceStatus = 'pending' | 'processing' | 'authorized' | 'error' | 'canceled';
+
 export type CashSessionStatus = 'OPEN' | 'CLOSED';
 
 export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'RESERVED';
@@ -76,6 +84,17 @@ export interface Customer {
   address: string | null;
   creditLimit: number;
   creditUsed: number;
+  personType: PersonType;
+  document: string | null;
+  legalName: string | null;
+  stateRegistration: string | null;
+  fiscalZipCode: string | null;
+  fiscalStreet: string | null;
+  fiscalNumber: string | null;
+  fiscalNeighborhood: string | null;
+  fiscalCity: string | null;
+  fiscalCityIbgeCode: string | null;
+  fiscalState: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -90,7 +109,38 @@ export interface CreditTransaction {
   type: CreditTransactionType;
   amount: number;
   description: string | null;
+  orderId: string | null;
+  status: CreditTransactionStatus;
+  settledAmount: number;
+  settledAt: Date | null;
   createdAt: Date;
+}
+
+export interface CreditSettlement {
+  id: string;
+  chargeId: string;
+  paymentId: string;
+  amount: number;
+  createdAt: Date;
+}
+
+export interface Invoice {
+  id: string;
+  customerId: string;
+  orderId: string | null;
+  creditTransactionId: string | null;
+  focusRef: string;
+  environment: InvoiceEnvironment;
+  status: InvoiceStatus;
+  sefazStatus: string | null;
+  sefazMessage: string | null;
+  accessKey: string | null;
+  number: string | null;
+  series: string | null;
+  danfeUrl: string | null;
+  xmlUrl: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // ============================================================================
@@ -117,6 +167,10 @@ export interface Product {
   imageUrl: string | null;
   isByWeight: boolean;
   categoryId: string;
+  ncm: string | null;
+  cfop: string | null;
+  origin: string | null;
+  taxCode: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -322,5 +376,20 @@ export interface RestaurantConfig {
   urbanDeliveryFee: number | null;
   ruralDeliveryFee: number | null;
   enabledPayments: string | null; // CSV: "CASH,PIX,..."
+  cnpj: string | null;
+  legalName: string | null;
+  stateRegistration: string | null;
+  taxRegime: string | null;
+  fiscalCityIbgeCode: string | null;
+  fiscalZipCode: string | null;
+  fiscalStreet: string | null;
+  fiscalNumber: string | null;
+  fiscalNeighborhood: string | null;
+  fiscalCity: string | null;
+  fiscalState: string | null;
+  defaultCfop: string | null;
+  defaultNcm: string | null;
+  defaultOrigin: string | null;
+  defaultTaxCode: string | null;
   updatedAt: Date;
 }

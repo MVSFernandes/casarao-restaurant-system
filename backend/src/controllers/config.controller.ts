@@ -23,6 +23,10 @@ export const updateConfig = async (req: Request, res: Response) => {
       name, logoUrl, bannerUrl, address, phone,
       openingHours, openingDays, deliveryFee,
       urbanDeliveryFee, ruralDeliveryFee,
+      cnpj, legalName, stateRegistration, taxRegime,
+      fiscalCityIbgeCode, fiscalZipCode, fiscalStreet, fiscalNumber,
+      fiscalNeighborhood, fiscalCity, fiscalState,
+      defaultCfop, defaultNcm, defaultOrigin, defaultTaxCode,
     } = req.body;
 
     const config = await configService.update({
@@ -36,6 +40,21 @@ export const updateConfig = async (req: Request, res: Response) => {
       deliveryFee: deliveryFee ? parseFloat(deliveryFee) : undefined,
       urbanDeliveryFee: urbanDeliveryFee ? parseFloat(urbanDeliveryFee) : undefined,
       ruralDeliveryFee: ruralDeliveryFee ? parseFloat(ruralDeliveryFee) : undefined,
+      cnpj,
+      legalName,
+      stateRegistration,
+      taxRegime,
+      fiscalCityIbgeCode,
+      fiscalZipCode,
+      fiscalStreet,
+      fiscalNumber,
+      fiscalNeighborhood,
+      fiscalCity,
+      fiscalState,
+      defaultCfop,
+      defaultNcm,
+      defaultOrigin,
+      defaultTaxCode,
     });
     res.json(config);
   } catch (error) {

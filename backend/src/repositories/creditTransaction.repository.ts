@@ -9,6 +9,17 @@ import {
 const TABLE = 'credit_transactions';
 
 export const creditTransactionRepository = {
+  async findById(id: string): Promise<CreditTransaction | null> {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('*')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (error) throw mapSupabaseError(error, { entity: 'CreditTransaction' });
+    return data ? toCreditTransactionDomain(data) : null;
+  },
+
   async findByCustomer(customerId: string): Promise<CreditTransaction[]> {
     const { data, error } = await supabase
       .from(TABLE)

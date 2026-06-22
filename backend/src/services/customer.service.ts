@@ -36,6 +36,17 @@ export const customerService = {
     email?: string | null;
     address?: string | null;
     creditLimit?: number;
+    personType?: Customer['personType'];
+    document?: string | null;
+    legalName?: string | null;
+    stateRegistration?: string | null;
+    fiscalZipCode?: string | null;
+    fiscalStreet?: string | null;
+    fiscalNumber?: string | null;
+    fiscalNeighborhood?: string | null;
+    fiscalCity?: string | null;
+    fiscalCityIbgeCode?: string | null;
+    fiscalState?: string | null;
   }): Promise<Customer> {
     return customerRepository.create({
       id: createId(),
@@ -45,6 +56,17 @@ export const customerService = {
       address: input.address ?? null,
       creditLimit: parseAmount(input.creditLimit ?? 0),
       creditUsed: 0,
+      personType: input.personType ?? 'PF',
+      document: input.document ?? null,
+      legalName: input.legalName ?? null,
+      stateRegistration: input.stateRegistration ?? null,
+      fiscalZipCode: input.fiscalZipCode ?? null,
+      fiscalStreet: input.fiscalStreet ?? null,
+      fiscalNumber: input.fiscalNumber ?? null,
+      fiscalNeighborhood: input.fiscalNeighborhood ?? null,
+      fiscalCity: input.fiscalCity ?? null,
+      fiscalCityIbgeCode: input.fiscalCityIbgeCode ?? null,
+      fiscalState: input.fiscalState ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -58,6 +80,17 @@ export const customerService = {
       email?: string | null;
       address?: string | null;
       creditLimit?: number;
+      personType?: Customer['personType'];
+      document?: string | null;
+      legalName?: string | null;
+      stateRegistration?: string | null;
+      fiscalZipCode?: string | null;
+      fiscalStreet?: string | null;
+      fiscalNumber?: string | null;
+      fiscalNeighborhood?: string | null;
+      fiscalCity?: string | null;
+      fiscalCityIbgeCode?: string | null;
+      fiscalState?: string | null;
     }
   ): Promise<Customer> {
     const patch: Partial<Customer> = {};
@@ -66,6 +99,17 @@ export const customerService = {
     if (input.email !== undefined) patch.email = input.email;
     if (input.address !== undefined) patch.address = input.address;
     if (input.creditLimit !== undefined) patch.creditLimit = parseAmount(input.creditLimit);
+    if (input.personType !== undefined) patch.personType = input.personType;
+    if (input.document !== undefined) patch.document = input.document;
+    if (input.legalName !== undefined) patch.legalName = input.legalName;
+    if (input.stateRegistration !== undefined) patch.stateRegistration = input.stateRegistration;
+    if (input.fiscalZipCode !== undefined) patch.fiscalZipCode = input.fiscalZipCode;
+    if (input.fiscalStreet !== undefined) patch.fiscalStreet = input.fiscalStreet;
+    if (input.fiscalNumber !== undefined) patch.fiscalNumber = input.fiscalNumber;
+    if (input.fiscalNeighborhood !== undefined) patch.fiscalNeighborhood = input.fiscalNeighborhood;
+    if (input.fiscalCity !== undefined) patch.fiscalCity = input.fiscalCity;
+    if (input.fiscalCityIbgeCode !== undefined) patch.fiscalCityIbgeCode = input.fiscalCityIbgeCode;
+    if (input.fiscalState !== undefined) patch.fiscalState = input.fiscalState;
     return customerRepository.update(id, patch);
   },
 

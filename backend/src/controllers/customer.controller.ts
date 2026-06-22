@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { customerService } from '../services/customer.service';
+import { creditService } from '../services/credit.service';
 import { DomainError } from '../types/errors';
 
 const handleError = (res: Response, error: unknown, fallback: string) => {
@@ -24,10 +25,49 @@ export const getCustomers = async (_req: Request, res: Response) => {
   }
 };
 
+export const getCustomerCredits = async (_req: Request, res: Response) => {
+  try {
+    const summaries = await creditService.listCustomerCredits();
+    res.json(summaries);
+  } catch (error) {
+    handleError(res, error, 'Erro ao buscar fiado dos clientes');
+  }
+};
+
+export const getCustomerCredit = async (req: Request, res: Response) => {
+  try {
+    const summary = await creditService.getCustomerCredit(req.params.id);
+    res.json(summary);
+  } catch (error) {
+    handleError(res, error, 'Erro ao buscar fiado do cliente');
+  }
+};
+
 export const createCustomer = async (req: Request, res: Response) => {
   try {
-    const { name, phone, email, address, creditLimit } = req.body;
-    const customer = await customerService.create({ name, phone, email, address, creditLimit });
+    const {
+      name, phone, email, address, creditLimit, personType, document, legalName,
+      stateRegistration, fiscalZipCode, fiscalStreet, fiscalNumber, fiscalNeighborhood,
+      fiscalCity, fiscalCityIbgeCode, fiscalState,
+    } = req.body;
+    const customer = await customerService.create({
+      name,
+      phone,
+      email,
+      address,
+      creditLimit,
+      personType,
+      document,
+      legalName,
+      stateRegistration,
+      fiscalZipCode,
+      fiscalStreet,
+      fiscalNumber,
+      fiscalNeighborhood,
+      fiscalCity,
+      fiscalCityIbgeCode,
+      fiscalState,
+    });
     const creditTxs = await customerService.getTransactions(customer.id);
     res.status(201).json({ ...customer, creditTxs });
   } catch (error) {
@@ -37,13 +77,28 @@ export const createCustomer = async (req: Request, res: Response) => {
 
 export const updateCustomer = async (req: Request, res: Response) => {
   try {
-    const { name, phone, email, address, creditLimit } = req.body;
+    const {
+      name, phone, email, address, creditLimit, personType, document, legalName,
+      stateRegistration, fiscalZipCode, fiscalStreet, fiscalNumber, fiscalNeighborhood,
+      fiscalCity, fiscalCityIbgeCode, fiscalState,
+    } = req.body;
     const customer = await customerService.update(req.params.id, {
       name,
       phone: phone || null,
       email: email || null,
       address: address || null,
       creditLimit,
+      personType,
+      document,
+      legalName,
+      stateRegistration,
+      fiscalZipCode,
+      fiscalStreet,
+      fiscalNumber,
+      fiscalNeighborhood,
+      fiscalCity,
+      fiscalCityIbgeCode,
+      fiscalState,
     });
     const creditTxs = await customerService.getTransactions(customer.id);
     res.json({ ...customer, creditTxs });
@@ -65,9 +120,9 @@ export const addCreditCharge = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount, description } = req.body;
-    const customer = await customerService.chargeCredit(id, amount, description);
-    const creditTxs = await customerService.getTransactions(id);
-    res.json({ ...customer, creditTxs });
+    await customerService.chargeCredit(id, amount, description);
+    const summary = await creditService.getCustomerCredit(id);
+    res.json(summary);
   } catch (error) {
     handleError(res, error, 'Erro ao lançar valor no fiado');
   }
@@ -77,9 +132,9 @@ export const payCredit = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount } = req.body;
-    const customer = await customerService.payCredit(id, amount);
-    const creditTxs = await customerService.getTransactions(id);
-    res.json({ ...customer, creditTxs });
+    await customerService.payCredit(id, amount);
+    const summary = await creditService.getCustomerCredit(id);
+    res.json(summary);
   } catch (error) {
     handleError(res, error, 'Erro ao registrar pagamento de fiado');
   }
