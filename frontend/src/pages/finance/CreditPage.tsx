@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Trash2,
   User,
   Wallet,
@@ -189,6 +190,7 @@ const CreditPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>('all');
+  const [search, setSearch] = useState('');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showCustomerModal, setShowCustomerModal] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -233,12 +235,33 @@ const CreditPage: React.FC = () => {
   }, [customers]);
 
   const filteredCustomers = useMemo(() => {
+    const normalizedSearch = digitsOnly(search) || search.trim().toLowerCase();
+
     return customers.filter((customer) => {
+      if (normalizedSearch) {
+        const searchableText = [
+          customer.name,
+          customer.phone,
+          customer.document,
+          customer.legalName,
+          formatDocument(customer.document),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        const searchableDigits = digitsOnly(`${customer.phone ?? ''}${customer.document ?? ''}`);
+        const matchesText = searchableText.includes(normalizedSearch);
+        const matchesDigits = !!digitsOnly(search) && searchableDigits.includes(digitsOnly(search));
+
+        if (!matchesText && !matchesDigits) return false;
+      }
+
       if (filter === 'open') return (customer.openRows ?? []).length > 0;
       if (filter === 'paid') return (customer.paidRows ?? []).length > 0;
       return true;
     });
-  }, [customers, filter]);
+  }, [customers, filter, search]);
 
   const resetCustomerForm = () => {
     setForm(emptyForm);
@@ -442,27 +465,38 @@ const CreditPage: React.FC = () => {
           <KpiCard icon={<CreditCard size={16} />} label="Limite cadastrado" value={formatMoney(totals.limit)} />
         </section>
 
-        <div className="mb-3.5 flex items-center justify-between gap-3">
+        <div className="mb-3.5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#94a3b8]">Clientes</div>
-          <div className="flex gap-1">
-            {[
-              ['all', 'Todos'],
-              ['open', 'Em aberto'],
-              ['paid', 'Pagos'],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                onClick={() => setFilter(value as FilterMode)}
-                className={clsx(
-                  'rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
-                  filter === value
-                    ? 'border-[#e2e8f0] bg-white text-[#334155]'
-                    : 'border-transparent bg-transparent text-[#64748b] hover:bg-white/60'
-                )}
-              >
-                {label}
-              </button>
-            ))}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative">
+              <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#94a3b8]" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar por nome, telefone, CPF ou CNPJ"
+                className="h-9 w-full rounded-lg border border-[#e2e8f0] bg-white pl-9 pr-3 text-[13px] text-[#334155] shadow-[0_1px_3px_rgba(0,0,0,0.04)] outline-none placeholder:text-[#94a3b8] focus:border-[#ea580c] sm:w-[320px]"
+              />
+            </div>
+            <div className="flex gap-1">
+              {[
+                ['all', 'Todos'],
+                ['open', 'Em aberto'],
+                ['paid', 'Pagos'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setFilter(value as FilterMode)}
+                  className={clsx(
+                    'rounded-lg border px-3 py-1.5 text-[13px] font-medium transition',
+                    filter === value
+                      ? 'border-[#e2e8f0] bg-white text-[#334155]'
+                      : 'border-transparent bg-transparent text-[#64748b] hover:bg-white/60'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -881,13 +915,25 @@ const CreditRow: React.FC<{
           <span className="text-[#94a3b8]">{expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</span>
           <div className="min-w-0">
             <div className="truncate text-sm font-medium text-[#1e293b]">{row.desc}</div>
-            <div className="mt-0.5 text-xs tabular-nums text-[#94a3b8]">{formatDate(row.date)}</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs tabular-nums text-[#94a3b8]">
+              <span>{formatDate(row.date)}</span>
+              {row.status === 'PARTIAL' && (
+                <span>
+                  Pago: {formatMoney(row.settledAmount)} de {formatMoney(row.amount)}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex flex-none items-center gap-2.5">
-          <span className={clsx('text-sm font-semibold tabular-nums', status.amountClass)}>
-            {formatMoney(row.openAmount)}
-          </span>
+          <div className="text-right">
+            <span className={clsx('block text-sm font-semibold tabular-nums', status.amountClass)}>
+              {formatMoney(row.openAmount)}
+            </span>
+            {row.status === 'PARTIAL' && (
+              <span className="block text-[11px] tabular-nums text-[#94a3b8]">restante</span>
+            )}
+          </div>
           <span className={clsx('rounded-md border px-2 py-0.5 text-[11px] font-semibold', status.badgeClass)}>
             {status.label}
           </span>
@@ -896,6 +942,23 @@ const CreditRow: React.FC<{
 
       {expanded && (
         <div className="border-t border-[#f1f5f9] px-3.5 pb-4 pt-1">
+          {row.status === 'PARTIAL' && (
+            <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-[#fde68a] bg-[#fffbeb] p-3 text-[12.5px] sm:grid-cols-3">
+              <div>
+                <span className="block text-[#92400e]">Total do lançamento</span>
+                <strong className="tabular-nums text-[#1e293b]">{formatMoney(row.amount)}</strong>
+              </div>
+              <div>
+                <span className="block text-[#92400e]">Já pago</span>
+                <strong className="tabular-nums text-[#16a34a]">{formatMoney(row.settledAmount)}</strong>
+              </div>
+              <div>
+                <span className="block text-[#92400e]">Em aberto</span>
+                <strong className="tabular-nums text-[#b45309]">{formatMoney(row.openAmount)}</strong>
+              </div>
+            </div>
+          )}
+
           <div className="mt-3 overflow-hidden rounded-lg border border-[#f1f5f9]">
             <div className="grid grid-cols-[1fr_54px_96px_96px] gap-2 bg-[#f8fafc] px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8]">
               <span>Produto</span>
