@@ -69,6 +69,41 @@ const formatDocument = (value?: string | null) => {
   return value || '';
 };
 
+const formatCpf = (value: string) =>
+  digitsOnly(value)
+    .slice(0, 11)
+    .replace(/^(\d{3})(\d)/, '$1.$2')
+    .replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1-$2');
+
+const formatCnpj = (value: string) =>
+  digitsOnly(value)
+    .slice(0, 14)
+    .replace(/^(\d{2})(\d)/, '$1.$2')
+    .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+    .replace(/\.(\d{3})(\d)/, '.$1/$2')
+    .replace(/(\d{4})(\d)/, '$1-$2');
+
+const formatPhone = (value: string) => {
+  const digits = digitsOnly(value).slice(0, 11);
+  if (digits.length <= 10) {
+    return digits
+      .replace(/^(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2');
+  }
+
+  return digits
+    .replace(/^(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2');
+};
+
+const formatZipCode = (value: string) =>
+  digitsOnly(value).slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2');
+
+const formatIbgeCode = (value: string) => digitsOnly(value).slice(0, 7);
+
+const formatUf = (value: string) => value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 2);
+
 const formatPhoneForWhatsApp = (phone?: string | null) => {
   const digits = digitsOnly(phone);
   if (!digits) return '';
@@ -595,8 +630,20 @@ const CreditPage: React.FC = () => {
                 ))}
               </div>
             </div>
-            <Field label="Telefone" value={form.phone} onChange={(value) => setForm({ ...form, phone: value })} />
-            <Field label="Documento" value={form.document} onChange={(value) => setForm({ ...form, document: value })} />
+            <Field
+              label="Telefone"
+              value={form.phone}
+              onChange={(value) => setForm({ ...form, phone: formatPhone(value) })}
+              placeholder="(11) 98765-4321"
+              inputMode="numeric"
+            />
+            <Field
+              label={form.personType === 'PJ' ? 'CNPJ' : 'CPF'}
+              value={form.document}
+              onChange={(value) => setForm({ ...form, document: form.personType === 'PJ' ? formatCnpj(value) : formatCpf(value) })}
+              placeholder={form.personType === 'PJ' ? '12.345.678/0001-90' : '123.456.789-00'}
+              inputMode="numeric"
+            />
             <Field label="E-mail" value={form.email} onChange={(value) => setForm({ ...form, email: value })} />
             <Field
               label="Limite de crédito (R$)"
@@ -626,7 +673,9 @@ const CreditPage: React.FC = () => {
                 <Field
                   label="CEP"
                   value={form.fiscalZipCode}
-                  onChange={(value) => setForm({ ...form, fiscalZipCode: value })}
+                  onChange={(value) => setForm({ ...form, fiscalZipCode: formatZipCode(value) })}
+                  placeholder="00000-000"
+                  inputMode="numeric"
                 />
                 <Field
                   label="Logradouro"
@@ -651,12 +700,15 @@ const CreditPage: React.FC = () => {
                 <Field
                   label="Código IBGE"
                   value={form.fiscalCityIbgeCode}
-                  onChange={(value) => setForm({ ...form, fiscalCityIbgeCode: value })}
+                  onChange={(value) => setForm({ ...form, fiscalCityIbgeCode: formatIbgeCode(value) })}
+                  placeholder="0000000"
+                  inputMode="numeric"
                 />
                 <Field
                   label="UF"
                   value={form.fiscalState}
-                  onChange={(value) => setForm({ ...form, fiscalState: value.toUpperCase().slice(0, 2) })}
+                  onChange={(value) => setForm({ ...form, fiscalState: formatUf(value) })}
+                  placeholder="SP"
                 />
               </>
             )}
@@ -779,8 +831,9 @@ const CreditPage: React.FC = () => {
           <Field
             label="Telefone"
             value={missingPhone}
-            onChange={setMissingPhone}
+            onChange={(value) => setMissingPhone(formatPhone(value))}
             placeholder="Ex.: (11) 98765-4321"
+            inputMode="numeric"
           />
 
           <div className="mt-5 flex gap-3">
@@ -1186,13 +1239,15 @@ const Field: React.FC<{
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
-}> = ({ label, value, onChange, type = 'text', placeholder }) => (
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+}> = ({ label, value, onChange, type = 'text', placeholder, inputMode }) => (
   <div>
     <label className="mb-1 block text-sm font-medium text-slate-700">{label}</label>
     <input
       type={type}
       value={value}
       placeholder={placeholder}
+      inputMode={inputMode}
       onChange={(event) => onChange(event.target.value)}
       className="input"
     />
