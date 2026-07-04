@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { Plus, Minus, Trash2, Send, Edit, XCircle } from 'lucide-react';
 import { MarmitaBuilderModal } from '../../components/modals/MarmitaBuilderModal';
 import { EditOrderModal } from '../../components/modals/EditOrderModal';
+import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from '../../constants/orders';
 
 interface CartItem {
   product: Product;
@@ -15,12 +16,8 @@ interface CartItem {
   unitPrice?: number;
 }
 
-const statusLabels: Record<string, string> = {
-  NEW: 'Novo', IN_PROGRESS: 'Em Preparo', READY: 'Pronto', DELIVERED: 'Entregue', CANCELED: 'Cancelado', FINISHED: 'Finalizado',
-};
-const statusColors: Record<string, string> = {
-  NEW: 'badge-blue', IN_PROGRESS: 'badge-yellow', READY: 'badge-green', DELIVERED: 'badge-gray', CANCELED: 'badge-red', FINISHED: 'badge-gray',
-};
+const statusLabels = ORDER_STATUS_LABELS;
+const statusColors = ORDER_STATUS_BADGE_CLASSES;
 
 const WaiterTablesPage: React.FC = () => {
   const [tables, setTables] = useState<Table[]>([]);

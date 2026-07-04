@@ -158,6 +158,19 @@ export class CashRegisterClosedError extends DomainError {
   }
 }
 
+export class PendingCashRegisterOrdersError extends DomainError {
+  constructor(pendingOrders: unknown[]) {
+    super(
+      `Não é possível fechar o caixa. Existem ${pendingOrders.length} pedido(s) pendente(s) de finalização/pagamento.`,
+      {
+        code: 'CASH_REGISTER_PENDING_ORDERS',
+        status: 409,
+        details: { pendingOrders },
+      }
+    );
+  }
+}
+
 /**
  * Transição de status inválida.
  * Ex: tentar passar pedido de NEW direto para DELIVERED.

@@ -49,7 +49,7 @@ export type TableStatus = 'AVAILABLE' | 'OCCUPIED' | 'CLOSED';
 export type OrderType = 'DINE_IN' | 'TAKE_AWAY' | 'DELIVERY';
 export type OrderStatus = 'NEW' | 'IN_PROGRESS' | 'READY' | 'DELIVERED' | 'CANCELED' | 'FINISHED';
 export type PaymentMethod = 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'PIX' | 'CREDIT' | 'ON_DELIVERY' | 'ON_PICKUP';
-export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED';
+export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED';
 
 export interface Table {
   id: string;

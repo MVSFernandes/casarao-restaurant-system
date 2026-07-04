@@ -31,24 +31,10 @@ import {
 } from 'lucide-react';
 import { EditOrderModal } from '../../components/modals/EditOrderModal';
 import { MarmitaBuilderModal } from '../../components/modals/MarmitaBuilderModal';
+import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from '../../constants/orders';
 
-const statusColors: Record<string, string> = {
-  NEW: 'badge-blue',
-  IN_PROGRESS: 'badge-yellow',
-  READY: 'badge-green',
-  DELIVERED: 'badge-gray',
-  CANCELED: 'badge-red',
-  FINISHED: 'badge-gray',
-};
-
-const statusLabels: Record<string, string> = {
-  NEW: 'Novo',
-  IN_PROGRESS: 'Em Preparo',
-  READY: 'Pronto',
-  DELIVERED: 'Entregue',
-  CANCELED: 'Cancelado',
-  FINISHED: 'Finalizado',
-};
+const statusColors = ORDER_STATUS_BADGE_CLASSES;
+const statusLabels = ORDER_STATUS_LABELS;
 
 interface CartItem {
   product: Product;
@@ -768,6 +754,7 @@ const OrdersPage: React.FC = () => {
     extraTotal: number;
   }) => {
     if (!marmitaProduct) return;
+    void extraTotal;
 
     const customProduct: Product = {
       ...marmitaProduct,

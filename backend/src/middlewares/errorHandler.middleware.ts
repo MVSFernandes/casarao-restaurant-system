@@ -7,6 +7,7 @@ import {
   ForeignKeyError,
   InsufficientCreditError,
   InsufficientStockError,
+  PendingCashRegisterOrdersError,
 } from '../types/errors';
 
 /**
@@ -88,6 +89,13 @@ export function mapSupabaseError(
   // Aqui tentamos detectar o subtipo pela mensagem.
   if (code === 'P0001') {
     const lower = message.toLowerCase();
+    if (message.includes('CASH_REGISTER_PENDING_ORDERS')) {
+      try {
+        return new PendingCashRegisterOrdersError(JSON.parse(details ?? '[]'));
+      } catch {
+        return new PendingCashRegisterOrdersError([]);
+      }
+    }
     if (lower.includes('estoque insuficiente') || lower.includes('insufficient stock')) {
       // Extrai nome do insumo se possível (entre aspas)
       const match = message.match(/"([^"]+)"/);

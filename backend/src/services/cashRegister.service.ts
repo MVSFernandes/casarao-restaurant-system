@@ -3,7 +3,11 @@ import { cashRegisterRepository } from '../repositories/cashRegister.repository'
 import { paymentRepository } from '../repositories/payment.repository';
 import { auditLogRepository } from '../repositories/auditLog.repository';
 import { CashRegisterSession, CashWithdrawal } from '../types/domain';
-import { ValidationError, CashRegisterClosedError } from '../types/errors';
+import {
+  CashRegisterClosedError,
+  PendingCashRegisterOrdersError,
+  ValidationError,
+} from '../types/errors';
 
 export interface SessionSummary extends CashRegisterSession {
   totalEntries: number;       // apenas CASH
@@ -146,13 +150,32 @@ export const cashRegisterService = {
       throw new ValidationError('closingAmount', 'O valor de fechamento não pode ser negativo.');
     }
 
+    const pendingOrders = await cashRegisterRepository.findPendingOrdersForClose(session.id);
+    if (pendingOrders.length > 0) {
+      await auditLogRepository.log({
+        id: createId(),
+        userId: actingUserId,
+        action: 'CASH_CLOSE_BLOCKED',
+        entity: 'CashRegisterSession',
+        entityId: session.id,
+        details: JSON.stringify({
+          pendingOrders,
+          attemptedClosingAmount: closingAmount,
+          attemptedAt: new Date().toISOString(),
+        }),
+        createdAt: new Date(),
+      });
+
+      throw new PendingCashRegisterOrdersError(pendingOrders);
+    }
+
     const paymentTotals = await getPaymentTotals(session.id);
     const withdrawals = await cashRegisterRepository.findWithdrawalsBySession(session.id);
     const withdrawalTotal = withdrawals.reduce((sum, w) => sum + w.amount, 0);
     const expectedAmount = session.openingAmount + paymentTotals.CASH - withdrawalTotal;
     const closingDate = new Date();
 
-    const updated = await cashRegisterRepository.updateSession(session.id, {
+    const updated = await cashRegisterRepository.closeOpenSession(session.id, {
       status: 'CLOSED',
       closingAmount,
       notes: notes ?? session.notes,

@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import { Order, OrderItem, OrderStatus } from '../types/domain';
+import { Order, OrderItem, OrderStatus, OrderType } from '../types/domain';
 import { mapSupabaseError } from '../middlewares/errorHandler.middleware';
 import { toOrderDomain, toOrderInsert, toOrderUpdate } from '../mappers/order.mapper';
 import { toOrderItemDomain, toOrderItemInsert } from '../mappers/orderItem.mapper';
@@ -7,6 +7,35 @@ import { NotFoundError } from '../types/errors';
 
 const TABLE = 'orders';
 const ITEMS_TABLE = 'order_items';
+
+export interface RecentOrderSummary {
+  id: string;
+  type: OrderType;
+  status: OrderStatus;
+  total: number;
+  createdAt: Date;
+  customerName: string | null;
+  tableId: string | null;
+  tableNumber: number | null;
+  waiterId: string | null;
+}
+
+type RecentOrderRow = {
+  id: string;
+  type: string;
+  status: string;
+  total: number;
+  created_at: string;
+  customer_name: string | null;
+  table_id: string | null;
+  waiter_id: string | null;
+  tables: { number: number } | { number: number }[] | null;
+};
+
+const tableNumberFromRelation = (relation: RecentOrderRow['tables']) => {
+  if (Array.isArray(relation)) return relation[0]?.number ?? null;
+  return relation?.number ?? null;
+};
 
 export const orderRepository = {
   async findById(id: string): Promise<Order | null> {
@@ -29,6 +58,37 @@ export const orderRepository = {
 
     if (error) throw mapSupabaseError(error, { entity: 'Order' });
     return (data ?? []).map(toOrderDomain);
+  },
+
+  async findRecentSummaries(
+    limit = 5,
+    filters: { waiterId?: string } = {}
+  ): Promise<RecentOrderSummary[]> {
+    let query = supabase
+      .from(TABLE)
+      .select('id,type,status,total,created_at,customer_name,table_id,waiter_id,tables(number)')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (filters.waiterId) {
+      query = query.eq('waiter_id', filters.waiterId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw mapSupabaseError(error, { entity: 'Order' });
+
+    return ((data ?? []) as unknown as RecentOrderRow[]).map((row) => ({
+      id: row.id,
+      type: row.type as OrderType,
+      status: row.status as OrderStatus,
+      total: row.total,
+      createdAt: new Date(row.created_at),
+      customerName: row.customer_name,
+      tableId: row.table_id,
+      waiterId: row.waiter_id,
+      tableNumber: tableNumberFromRelation(row.tables),
+    }));
   },
 
   async findBySession(sessionId: string): Promise<Order[]> {

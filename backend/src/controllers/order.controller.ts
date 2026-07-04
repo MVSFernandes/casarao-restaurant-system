@@ -72,6 +72,31 @@ export const getOrders = async (req: Request, res: Response) => {
   }
 };
 
+export const getRecentOrders = async (req: Request, res: Response) => {
+  try {
+    const rawLimit = Number(req.query.limit ?? 5);
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 20) : 5;
+    const user = (req as any).user;
+
+    const filters: { waiterId?: string } = {};
+    if ((req.query.myOrders === 'true' || user?.role === 'WAITER') && user?.id) {
+      filters.waiterId = user.id;
+    }
+
+    const orders = await orderRepository.findRecentSummaries(limit, filters);
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(
+      orders.map((order) => ({
+        ...order,
+        createdAt: order.createdAt.toISOString(),
+      }))
+    );
+  } catch (error) {
+    handleError(res, error, 'Erro ao buscar pedidos recentes');
+  }
+};
+
 export const getOrderById = async (req: Request, res: Response) => {
   try {
     const order = await orderRepository.findById(req.params.id);
