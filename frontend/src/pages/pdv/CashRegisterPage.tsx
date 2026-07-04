@@ -12,11 +12,51 @@ import {
   CreditCard,
   QrCode
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import api from '../../services/api';
-import type { CashRegisterSession } from '../../types';
+import type { CashRegisterSession, OrderStatus, OrderType, PaymentMethod, PaymentStatus } from '../../types';
 
 const currency = (value: number | string | null | undefined) =>
-  `R$ ${Number(value || 0).toFixed(2)}`;
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+
+interface PendingCloseOrder {
+  id: string;
+  type: OrderType;
+  orderStatus: OrderStatus;
+  total: number;
+  paymentStatus: PaymentStatus | null;
+  paymentMethod: PaymentMethod | null;
+}
+
+const orderStatusLabels: Record<OrderStatus, string> = {
+  NEW: 'Novo',
+  IN_PROGRESS: 'Em Preparo',
+  READY: 'Pronto',
+  DELIVERED: 'Entregue',
+  FINISHED: 'Finalizado',
+  CANCELED: 'Cancelado',
+};
+
+const paymentStatusLabels: Record<string, string> = {
+  PENDING: 'Pendente',
+  PAID: 'Pago',
+  FAILED: 'Falhou',
+  REFUNDED: 'Estornado',
+};
+
+const paymentMethodLabels: Record<string, string> = {
+  CASH: 'Dinheiro',
+  PIX: 'PIX',
+  CREDIT_CARD: 'Crédito',
+  DEBIT_CARD: 'Débito',
+  CREDIT: 'Fiado',
+};
+
+const orderTypeLabels: Record<OrderType, string> = {
+  DINE_IN: 'Mesa',
+  TAKE_AWAY: 'Retirada',
+  DELIVERY: 'Entrega',
+};
 
 const CashRegisterPage: React.FC = () => {
   const [current, setCurrent] = useState<CashRegisterSession | null>(null);
@@ -30,6 +70,7 @@ const CashRegisterPage: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [suggestedAmount, setSuggestedAmount] = useState<number | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  const [pendingCloseOrders, setPendingCloseOrders] = useState<PendingCloseOrder[]>([]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -120,6 +161,14 @@ const CashRegisterPage: React.FC = () => {
       await fetchData();
       showToast('success', 'Caixa fechado com sucesso.');
     } catch (error: any) {
+      const responseData = error?.response?.data;
+      const pendingOrders = responseData?.details?.pendingOrders;
+      if (responseData?.code === 'CASH_REGISTER_PENDING_ORDERS' && Array.isArray(pendingOrders)) {
+        setPendingCloseOrders(pendingOrders);
+        showToast('error', responseData.message);
+        return;
+      }
+
       showToast('error', error?.response?.data?.message || 'Erro ao fechar caixa.');
     } finally {
       setSaving(false);
@@ -199,6 +248,68 @@ const CashRegisterPage: React.FC = () => {
         >
           {toast.type === 'success' ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
           {toast.message}
+        </div>
+      )}
+
+      {pendingCloseOrders.length > 0 && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+            <div className="border-b border-gray-100 p-5">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-red-100 p-2 text-red-600">
+                  <AlertTriangle size={22} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Não é possível fechar o caixa</h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Existem {pendingCloseOrders.length} pedido(s) pendente(s) de finalização/pagamento.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto p-5">
+              <div className="space-y-3">
+                {pendingCloseOrders.map((order) => (
+                  <div key={order.id} className="rounded-xl border border-red-100 bg-red-50/40 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-bold text-gray-900">Pedido #{order.id.slice(-6).toUpperCase()}</p>
+                        <p className="mt-1 text-sm text-gray-600">
+                          {orderTypeLabels[order.type]} • {orderStatusLabels[order.orderStatus]} • {currency(order.total)}
+                        </p>
+                      </div>
+                      <div className="text-sm sm:text-right">
+                        <p className="font-semibold text-gray-800">
+                          Pagamento: {order.paymentStatus ? paymentStatusLabels[order.paymentStatus] || order.paymentStatus : 'Sem registro'}
+                        </p>
+                        {order.paymentMethod && (
+                          <p className="text-gray-500">{paymentMethodLabels[order.paymentMethod] || order.paymentMethod}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 border-t border-gray-100 p-5 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPendingCloseOrders([])}
+                className="btn-secondary"
+              >
+                Entendi
+              </button>
+              <Link
+                to="/pdv/orders"
+                onClick={() => setPendingCloseOrders([])}
+                className="btn-primary text-center"
+              >
+                Resolver pedidos
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 

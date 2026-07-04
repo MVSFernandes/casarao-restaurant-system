@@ -1,5 +1,12 @@
 import { supabase } from '../lib/supabase';
-import { CashRegisterSession, CashWithdrawal } from '../types/domain';
+import {
+  CashRegisterSession,
+  CashWithdrawal,
+  OrderStatus,
+  OrderType,
+  PaymentMethod,
+  PaymentStatus,
+} from '../types/domain';
 import { mapSupabaseError } from '../middlewares/errorHandler.middleware';
 import {
   toCashRegisterSessionDomain,
@@ -12,6 +19,31 @@ import { NotFoundError } from '../types/errors';
 
 const SESSION_TABLE = 'cash_register_sessions';
 const WITHDRAWAL_TABLE = 'cash_withdrawals';
+
+export interface PendingCashRegisterOrder {
+  id: string;
+  type: OrderType;
+  orderStatus: OrderStatus;
+  total: number;
+  paymentStatus: PaymentStatus | null;
+  paymentMethod: PaymentMethod | null;
+}
+
+type PendingCashRegisterOrderRow = {
+  id: string;
+  type: string;
+  status: string;
+  total: number;
+  payments:
+    | { id: string; status: string | null; method: string | null }
+    | { id: string; status: string | null; method: string | null }[]
+    | null;
+};
+
+const paymentFromRelation = (relation: PendingCashRegisterOrderRow['payments']) => {
+  if (Array.isArray(relation)) return relation[0] ?? null;
+  return relation;
+};
 
 export const cashRegisterRepository = {
   // ---- SESSIONS ----
@@ -87,6 +119,59 @@ export const cashRegisterRepository = {
     if (error) throw mapSupabaseError(error, { entity: 'CashRegisterSession' });
     if (!data) throw new NotFoundError('CashRegisterSession', id);
     return toCashRegisterSessionDomain(data);
+  },
+
+  async closeOpenSession(
+    id: string,
+    patch: Partial<CashRegisterSession>
+  ): Promise<CashRegisterSession> {
+    const payload = toCashRegisterSessionUpdate(patch);
+
+    const { data, error } = await supabase
+      .from(SESSION_TABLE)
+      .update(payload)
+      .eq('id', id)
+      .eq('status', 'OPEN')
+      .select()
+      .maybeSingle();
+
+    if (error) throw mapSupabaseError(error, { entity: 'CashRegisterSession' });
+    if (!data) throw new NotFoundError('CashRegisterSession', id);
+    return toCashRegisterSessionDomain(data);
+  },
+
+  async findPendingOrdersForClose(sessionId: string): Promise<PendingCashRegisterOrder[]> {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id,type,status,total,created_at,payments(id,status,method)')
+      .eq('cash_register_session_id', sessionId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw mapSupabaseError(error, { entity: 'Order' });
+
+    return ((data ?? []) as unknown as PendingCashRegisterOrderRow[])
+      .filter((row) => {
+        const payment = paymentFromRelation(row.payments);
+        if (row.status === 'CANCELED') return false;
+
+        return (
+          row.status !== 'FINISHED' ||
+          !payment ||
+          ['PENDING', 'FAILED'].includes(payment?.status ?? '')
+        );
+      })
+      .map((row) => {
+        const payment = paymentFromRelation(row.payments);
+
+        return {
+          id: row.id,
+          type: row.type as OrderType,
+          orderStatus: row.status as OrderStatus,
+          total: row.total,
+          paymentStatus: (payment?.status as PaymentStatus | undefined) ?? null,
+          paymentMethod: (payment?.method as PaymentMethod | undefined) ?? null,
+        };
+      });
   },
 
   // ---- WITHDRAWALS ----
