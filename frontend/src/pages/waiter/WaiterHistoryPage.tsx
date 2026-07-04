@@ -3,13 +3,10 @@ import api from '../../services/api';
 import type { Order, Category } from '../../types';
 import { Edit, XCircle } from 'lucide-react';
 import { EditOrderModal } from '../../components/modals/EditOrderModal';
+import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from '../../constants/orders';
 
-const statusLabels: Record<string, string> = {
-  NEW: 'Novo', IN_PROGRESS: 'Em Preparo', READY: 'Pronto', DELIVERED: 'Entregue', CANCELED: 'Cancelado', FINISHED: 'Finalizado',
-};
-const statusColors: Record<string, string> = {
-  NEW: 'badge-blue', IN_PROGRESS: 'badge-yellow', READY: 'badge-green', DELIVERED: 'badge-gray', CANCELED: 'badge-red', FINISHED: 'badge-gray',
-};
+const statusLabels = ORDER_STATUS_LABELS;
+const statusColors = ORDER_STATUS_BADGE_CLASSES;
 
 const WaiterHistoryPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
