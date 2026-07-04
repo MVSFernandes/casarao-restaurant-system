@@ -4,7 +4,13 @@ import { orderRepository } from '../repositories/order.repository';
 import { DomainError } from '../types/errors';
 
 const handleError = (res: Response, error: unknown, fallback: string) => {
-  if (error instanceof DomainError) return res.status(error.status).json({ message: error.message });
+  if (error instanceof DomainError) {
+    return res.status(error.status).json({
+      message: error.message,
+      code: error.code,
+      details: error.details,
+    });
+  }
   console.error(error);
   return res.status(500).json({ message: fallback });
 };
