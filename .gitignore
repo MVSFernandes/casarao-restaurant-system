@@ -47,4 +47,6 @@ backend/prisma_backup/
 
 # Supabase CLI (config local, não versionar)
 .supabase/
-backend/supabase/
+backend/supabase/*
+!backend/supabase/migrations/
+!backend/supabase/migrations/*.sql
