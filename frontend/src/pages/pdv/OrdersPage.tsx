@@ -748,7 +748,7 @@ const OrdersPage: React.FC = () => {
 
   const addMarmitaToCart = ({
     notes,
-    extraTotal,
+    extraTotal: _extraTotal,
   }: {
     notes: string;
     extraTotal: number;

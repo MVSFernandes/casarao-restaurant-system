@@ -57,9 +57,9 @@ export const getProductById = async (req: Request, res: Response) => {
 
 export const createProduct = async (req: Request, res: Response) => {
   try {
-    const { name, description, price, categoryId, imageUrl, isByWeight } = req.body;
+    const { name, description, price, categoryId, imageUrl, isByWeight, ncm, cfop, origin, taxCode } = req.body;
     const product = await productService.create({
-      name, description, price, categoryId, imageUrl, isByWeight,
+      name, description, price, categoryId, imageUrl, isByWeight, ncm, cfop, origin, taxCode,
     });
     const categories = await categoryRepository.findAll();
     const category = categories.find((c) => c.id === product.categoryId) ?? null;
@@ -71,7 +71,7 @@ export const createProduct = async (req: Request, res: Response) => {
 
 export const updateProduct = async (req: Request, res: Response) => {
   try {
-    const { name, description, price, categoryId, imageUrl, isByWeight } = req.body;
+    const { name, description, price, categoryId, imageUrl, isByWeight, ncm, cfop, origin, taxCode } = req.body;
     const product = await productService.update(req.params.id, {
       name,
       description,
@@ -79,6 +79,10 @@ export const updateProduct = async (req: Request, res: Response) => {
       categoryId,
       imageUrl,
       isByWeight: isByWeight !== undefined ? !!isByWeight : undefined,
+      ncm,
+      cfop,
+      origin,
+      taxCode,
     });
     const [categories, stockItems] = await Promise.all([
       categoryRepository.findAll(),

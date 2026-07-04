@@ -13,6 +13,8 @@ import userRoutes from './user.routes';
 import marmitaMenuRoutes from './marmitaMenu.routes';
 import productStockLinkRoutes from './productStockLink.routes';
 import cashRegisterRoutes from './cashRegister.routes';
+import invoiceRoutes from './invoice.routes';
+import webhookRoutes from './webhook.routes';
 
 const router = Router();
 
@@ -30,5 +32,7 @@ router.use('/config', configRoutes);
 router.use('/marmita-menu', marmitaMenuRoutes);
 router.use('/product-stock-links', productStockLinkRoutes);
 router.use('/cash-register', cashRegisterRoutes);
+router.use('/invoices', invoiceRoutes);
+router.use('/webhooks', webhookRoutes);
 
 export default router;

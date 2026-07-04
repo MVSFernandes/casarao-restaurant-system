@@ -1,9 +1,8 @@
-import { Database } from '../types/database';
 import { Product } from '../types/domain';
 
-type ProductRow = Database['public']['Tables']['products']['Row'];
-type ProductInsert = Database['public']['Tables']['products']['Insert'];
-type ProductUpdate = Database['public']['Tables']['products']['Update'];
+type ProductRow = Record<string, any>;
+type ProductInsert = Record<string, any>;
+type ProductUpdate = Record<string, any>;
 
 export function toProductDomain(row: ProductRow): Product {
   return {
@@ -14,6 +13,10 @@ export function toProductDomain(row: ProductRow): Product {
     imageUrl: row.image_url,
     isByWeight: row.is_by_weight,
     categoryId: row.category_id,
+    ncm: row.ncm ?? null,
+    cfop: row.cfop ?? null,
+    origin: row.origin ?? null,
+    taxCode: row.tax_code ?? null,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -28,6 +31,10 @@ export function toProductInsert(domain: Product): ProductInsert {
     image_url: domain.imageUrl,
     is_by_weight: domain.isByWeight,
     category_id: domain.categoryId,
+    ncm: domain.ncm,
+    cfop: domain.cfop,
+    origin: domain.origin,
+    tax_code: domain.taxCode,
   };
 }
 
@@ -39,5 +46,9 @@ export function toProductUpdate(patch: Partial<Product>): ProductUpdate {
   if (patch.imageUrl !== undefined) update.image_url = patch.imageUrl;
   if (patch.isByWeight !== undefined) update.is_by_weight = patch.isByWeight;
   if (patch.categoryId !== undefined) update.category_id = patch.categoryId;
+  if (patch.ncm !== undefined) update.ncm = patch.ncm;
+  if (patch.cfop !== undefined) update.cfop = patch.cfop;
+  if (patch.origin !== undefined) update.origin = patch.origin;
+  if (patch.taxCode !== undefined) update.tax_code = patch.taxCode;
   return update;
 }

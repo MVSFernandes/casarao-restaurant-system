@@ -30,6 +30,10 @@ export interface Product {
   categoryId: string;
   category?: Category;
   stockItems?: ProductStockLink[];
+  ncm?: string | null;
+  cfop?: string | null;
+  origin?: string | null;
+  taxCode?: string | null;
 }
 
 export interface ProductStockLink {
@@ -119,7 +123,54 @@ export interface CreditTransaction {
   type: 'CHARGE' | 'PAYMENT' | string;
   amount: number;
   description?: string;
+  orderId?: string | null;
+  status?: 'OPEN' | 'PARTIAL' | 'PAID';
+  settledAmount?: number;
+  settledAt?: string | null;
   createdAt: string;
+}
+
+export interface Invoice {
+  id: string;
+  customerId: string;
+  orderId?: string | null;
+  creditTransactionId?: string | null;
+  focusRef: string;
+  environment: 'homologation' | 'production';
+  status: 'pending' | 'processing' | 'authorized' | 'error' | 'canceled';
+  sefazStatus?: string | null;
+  sefazMessage?: string | null;
+  accessKey?: string | null;
+  number?: string | null;
+  series?: string | null;
+  danfeUrl?: string | null;
+  xmlUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreditEntryItem {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+  notes?: string | null;
+}
+
+export interface CreditEntry {
+  id: string;
+  orderId?: string | null;
+  desc: string;
+  date: string;
+  amount: number;
+  settledAmount: number;
+  openAmount: number;
+  status: 'OPEN' | 'PARTIAL' | 'PAID';
+  settledAt?: string | null;
+  items: CreditEntryItem[];
+  invoice?: Invoice | null;
 }
 
 export interface Customer {
@@ -130,6 +181,20 @@ export interface Customer {
   address?: string;
   creditLimit: number;
   creditUsed: number;
+  openTotal?: number;
+  personType?: 'PF' | 'PJ';
+  document?: string | null;
+  legalName?: string | null;
+  stateRegistration?: string | null;
+  fiscalZipCode?: string | null;
+  fiscalStreet?: string | null;
+  fiscalNumber?: string | null;
+  fiscalNeighborhood?: string | null;
+  fiscalCity?: string | null;
+  fiscalCityIbgeCode?: string | null;
+  fiscalState?: string | null;
+  openRows?: CreditEntry[];
+  paidRows?: CreditEntry[];
   creditTxs?: CreditTransaction[];
   createdAt: string;
   updatedAt: string;
@@ -178,6 +243,21 @@ export interface RestaurantConfig {
   urbanDeliveryFee?: number;
   ruralDeliveryFee?: number;
   enabledPayments?: string;
+  cnpj?: string | null;
+  legalName?: string | null;
+  stateRegistration?: string | null;
+  taxRegime?: string | null;
+  fiscalCityIbgeCode?: string | null;
+  fiscalZipCode?: string | null;
+  fiscalStreet?: string | null;
+  fiscalNumber?: string | null;
+  fiscalNeighborhood?: string | null;
+  fiscalCity?: string | null;
+  fiscalState?: string | null;
+  defaultCfop?: string | null;
+  defaultNcm?: string | null;
+  defaultOrigin?: string | null;
+  defaultTaxCode?: string | null;
 }
 
 export type MarmitaGroup = 'GUARNICAO' | 'CARNE' | 'EXTRA';
