@@ -2,12 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   AlertCircle,
+  Banknote,
   Check,
   ChevronDown,
   ChevronRight,
   CreditCard,
   Download,
   FileText,
+  Loader2,
   MessageCircle,
   Pencil,
   Plus,
@@ -110,6 +112,22 @@ const formatPhoneForWhatsApp = (phone?: string | null) => {
   return digits.startsWith('55') ? digits : `55${digits}`;
 };
 
+const fiscalFields: Array<{ key: keyof Customer; label: string }> = [
+  { key: 'document', label: 'CNPJ' },
+  { key: 'fiscalZipCode', label: 'CEP fiscal' },
+  { key: 'fiscalStreet', label: 'Logradouro' },
+  { key: 'fiscalNumber', label: 'Número' },
+  { key: 'fiscalNeighborhood', label: 'Bairro' },
+  { key: 'fiscalCity', label: 'Cidade' },
+  { key: 'fiscalCityIbgeCode', label: 'Código IBGE' },
+  { key: 'fiscalState', label: 'UF' },
+];
+
+const getMissingFiscalFields = (customer: Customer) =>
+  fiscalFields
+    .filter(({ key }) => !String(customer[key] ?? '').trim())
+    .map(({ label }) => label);
+
 const getRestaurantName = () => {
   const raw = localStorage.getItem('restaurant_config');
   if (!raw) return 'restaurante';
@@ -123,16 +141,7 @@ const getRestaurantName = () => {
 
 const hasFiscalData = (customer: Customer) => {
   if (customer.personType !== 'PJ') return false;
-  return [
-    customer.document,
-    customer.fiscalZipCode,
-    customer.fiscalStreet,
-    customer.fiscalNumber,
-    customer.fiscalNeighborhood,
-    customer.fiscalCity,
-    customer.fiscalCityIbgeCode,
-    customer.fiscalState,
-  ].every((field) => String(field ?? '').trim());
+  return getMissingFiscalFields(customer).length === 0;
 };
 
 const buildWhatsAppMessage = (customer: Customer) => {
@@ -179,10 +188,16 @@ const getRowStatus = (row: CreditEntry) => {
 
 const getInvoiceMeta = (status?: string | null) => {
   switch (status) {
+    case 'pending':
+      return {
+        label: 'Pendente',
+        badgeClass: 'bg-[#fef3c7] text-[#b45309] border-[#fde68a]',
+        text: 'Ainda não emitida.',
+      };
     case 'processing':
       return {
         label: 'Processando',
-        badgeClass: 'bg-[#eff6ff] text-[#1d4ed8] border-[#bfdbfe]',
+        badgeClass: 'bg-[#fef3c7] text-[#b45309] border-[#fde68a]',
         text: 'Aguardando autorização da SEFAZ...',
       };
     case 'authorized':
@@ -200,14 +215,36 @@ const getInvoiceMeta = (status?: string | null) => {
     default:
       return {
         label: 'Pendente',
-        badgeClass: 'bg-[#f1f5f9] text-[#64748b] border-[#e2e8f0]',
+        badgeClass: 'bg-[#fef3c7] text-[#b45309] border-[#fde68a]',
         text: 'Ainda não emitida.',
       };
   }
 };
 
+const unavailableInvoiceMeta = {
+  label: 'Indisponível',
+  badgeClass: 'bg-[#f1f5f9] text-[#64748b] border-[#e2e8f0]',
+  text: '',
+};
+
+const actionButtonBase =
+  'inline-flex min-h-[38px] items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-[13px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-55';
+
 const ghostIconButton =
   'inline-flex h-[34px] w-[34px] items-center justify-center rounded-lg border border-[#e2e8f0] bg-white text-[#64748b] transition hover:bg-slate-50';
+
+const WhatsAppIcon: React.FC<{ size?: number; className?: string }> = ({ size = 15, className }) => (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 32 32"
+    width={size}
+    height={size}
+    className={className}
+    fill="currentColor"
+  >
+    <path d="M16.02 3.2A12.72 12.72 0 0 0 5.13 22.48L3.6 28.8l6.48-1.5a12.72 12.72 0 1 0 5.94-24.1Zm0 2.42a10.3 10.3 0 0 1 8.72 15.8 10.24 10.24 0 0 1-12.3 3.62l-.45-.2-3.85.9.92-3.74-.24-.48A10.3 10.3 0 0 1 16.02 5.62Zm-4.31 5.58c-.22 0-.58.08-.88.42-.3.33-1.16 1.13-1.16 2.76 0 1.62 1.19 3.19 1.35 3.41.16.22 2.3 3.68 5.68 5.01 2.8 1.1 3.37.88 3.98.82.61-.06 1.96-.8 2.24-1.57.28-.77.28-1.43.19-1.57-.08-.14-.3-.22-.64-.39-.33-.16-1.96-.97-2.26-1.08-.3-.11-.53-.16-.75.17-.22.33-.86 1.08-1.05 1.3-.19.22-.39.25-.72.08-.33-.17-1.41-.52-2.69-1.66-.99-.88-1.66-1.98-1.85-2.31-.19-.33-.02-.51.15-.68.15-.15.33-.39.5-.58.16-.2.22-.33.33-.56.11-.22.05-.42-.03-.58-.08-.17-.75-1.8-1.02-2.46-.27-.64-.54-.55-.75-.56h-.62Z" />
+  </svg>
+);
 
 const ModalFrame: React.FC<{
   title: string;
@@ -494,9 +531,10 @@ const CreditPage: React.FC = () => {
       setInvoiceLoadingId(row.id);
       await api.post('/invoices', { creditTransactionId: row.id });
       fetchCustomers();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      showError(error?.response?.data?.message || 'Não foi possível emitir a NF-e.', 'Erro ao emitir NF-e');
+      const apiMessage = (error as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      showError(apiMessage || 'Não foi possível emitir a NF-e.', 'Erro ao emitir NF-e');
     } finally {
       setInvoiceLoadingId(null);
     }
@@ -1027,7 +1065,9 @@ const CustomerCard: React.FC<{
                   onPay={() => onPay(row)}
                   onWhatsApp={onWhatsApp}
                   onIssueInvoice={() => onIssueInvoice(row)}
+                  onEditCustomer={onEdit}
                   invoiceLoading={invoiceLoadingId === row.id}
+                  showCollectionActions
                 />
               ))}
             </div>
@@ -1055,21 +1095,24 @@ const CustomerCard: React.FC<{
 
         <div className="mt-5">
           <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.07em] text-[#cbd5e1]">Pagos</div>
-          <div className="flex flex-col">
+          <div className="flex flex-col gap-2">
             {paidRows.length === 0 && (
               <div className="border-t border-[#f1f5f9] py-2 text-sm text-[#cbd5e1]">Nenhum pagamento registrado.</div>
             )}
             {paidRows.map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-3 border-t border-[#f1f5f9] py-2.5">
-                <div className="flex items-center gap-2.5">
-                  <Check size={14} className="text-[#16a34a]" />
-                  <div>
-                    <div className="text-[13.5px] text-[#94a3b8]">{row.desc}</div>
-                    <div className="mt-0.5 text-[11.5px] tabular-nums text-[#cbd5e1]">Pago em {formatDate(row.settledAt)}</div>
-                  </div>
-                </div>
-                <span className="text-[13px] font-medium tabular-nums text-[#94a3b8]">{formatMoney(row.amount)}</span>
-              </div>
+              <CreditRow
+                key={row.id}
+                customer={customer}
+                row={row}
+                expanded={expandedRows.has(row.id)}
+                onToggle={() => onToggleRow(row.id)}
+                onPay={() => onPay(row)}
+                onWhatsApp={onWhatsApp}
+                onIssueInvoice={() => onIssueInvoice(row)}
+                onEditCustomer={onEdit}
+                invoiceLoading={invoiceLoadingId === row.id}
+                showCollectionActions={false}
+              />
             ))}
           </div>
         </div>
@@ -1086,11 +1129,29 @@ const CreditRow: React.FC<{
   onPay: () => void;
   onWhatsApp: () => void;
   onIssueInvoice: () => void;
+  onEditCustomer: () => void;
   invoiceLoading: boolean;
-}> = ({ customer, row, expanded, onToggle, onPay, onWhatsApp, onIssueInvoice, invoiceLoading }) => {
+  showCollectionActions?: boolean;
+}> = ({
+  customer,
+  row,
+  expanded,
+  onToggle,
+  onPay,
+  onWhatsApp,
+  onIssueInvoice,
+  onEditCustomer,
+  invoiceLoading,
+  showCollectionActions = true,
+}) => {
   const status = getRowStatus(row);
-  const invoiceMeta = getInvoiceMeta(row.invoice?.status);
+  const missingFiscalFields = getMissingFiscalFields(customer);
+  const hasLinkedOrder = !!row.orderId;
   const canIssueInvoice = customer.personType === 'PJ' && hasFiscalData(customer) && !!row.orderId;
+  const invoiceMeta = !hasLinkedOrder ? unavailableInvoiceMeta : getInvoiceMeta(row.invoice?.status);
+  const invoiceBlockedByFiscalData = !row.invoice && hasLinkedOrder && missingFiscalFields.length > 0;
+  const displayAmount = row.status === 'PAID' ? row.amount : row.openAmount;
+  const showInvoiceError = row.invoice?.status === 'error' && hasLinkedOrder;
 
   return (
     <div className="overflow-hidden rounded-[10px] border border-[#e2e8f0]">
@@ -1112,13 +1173,16 @@ const CreditRow: React.FC<{
                   Pago: {formatMoney(row.settledAmount)} de {formatMoney(row.amount)}
                 </span>
               )}
+              {row.status === 'PAID' && (
+                <span>Pago em {formatDate(row.settledAt)}</span>
+              )}
             </div>
           </div>
         </div>
         <div className="flex flex-none items-center gap-2.5">
           <div className="text-right">
             <span className={clsx('block text-sm font-semibold tabular-nums', status.amountClass)}>
-              {formatMoney(row.openAmount)}
+              {formatMoney(displayAmount)}
             </span>
             {row.status === 'PARTIAL' && (
               <span className="block text-[11px] tabular-nums text-[#94a3b8]">restante</span>
@@ -1149,8 +1213,8 @@ const CreditRow: React.FC<{
             </div>
           )}
 
-          <div className="mt-3 overflow-hidden rounded-lg border border-[#f1f5f9]">
-            <div className="grid grid-cols-[1fr_54px_96px_96px] gap-2 bg-[#f8fafc] px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8]">
+          <div className="mt-3 overflow-x-auto rounded-lg border border-[#f1f5f9]">
+            <div className="grid min-w-[430px] grid-cols-[1fr_54px_96px_96px] gap-2 bg-[#f8fafc] px-3 py-2 text-[10.5px] font-semibold uppercase tracking-[0.04em] text-[#94a3b8]">
               <span>Produto</span>
               <span className="text-right">Qtd</span>
               <span className="text-right">Vlr. unit.</span>
@@ -1164,7 +1228,7 @@ const CreditRow: React.FC<{
               row.items.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-[1fr_54px_96px_96px] gap-2 border-t border-[#f1f5f9] px-3 py-2.5 text-[13px]"
+                  className="grid min-w-[430px] grid-cols-[1fr_54px_96px_96px] gap-2 border-t border-[#f1f5f9] px-3 py-2.5 text-[13px]"
                 >
                   <span className="min-w-0 truncate text-[#334155]">{item.productName}</span>
                   <span className="text-right tabular-nums text-[#64748b]">{item.quantity}</span>
@@ -1175,46 +1239,70 @@ const CreditRow: React.FC<{
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={onPay} className="rounded-lg border border-[#cbd5e1] bg-white px-3.5 py-2 text-[13px] font-medium text-[#1e293b] hover:bg-slate-50">
-              Registrar pagamento
-            </button>
-            <button onClick={onWhatsApp} className="rounded-lg border border-[#e2e8f0] bg-white px-3.5 py-2 text-[13px] font-medium text-[#64748b] hover:bg-slate-50">
-              Cobrar no WhatsApp
-            </button>
-            {canIssueInvoice && !row.invoice && (
-              <button
-                onClick={onIssueInvoice}
-                disabled={invoiceLoading}
-                className="rounded-lg border border-[#e2e8f0] bg-white px-3.5 py-2 text-[13px] font-medium text-[#64748b] hover:bg-slate-50 disabled:opacity-50"
-              >
-                {invoiceLoading ? 'Emitindo...' : 'Emitir NF-e'}
-              </button>
-            )}
-          </div>
+          {(showCollectionActions || (canIssueInvoice && !row.invoice)) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {showCollectionActions && (
+                <>
+                  <button onClick={onPay} className={clsx(actionButtonBase, 'bg-[#ea580c] text-white shadow-sm hover:bg-[#c2410c]')}>
+                    <Banknote size={15} /> Registrar pagamento
+                  </button>
+                  <button
+                    onClick={onWhatsApp}
+                    className={clsx(actionButtonBase, 'border border-[#25D366]/50 bg-white text-[#166534] hover:bg-[#f0fdf4]')}
+                  >
+                    <WhatsAppIcon className="text-[#25D366]" /> Cobrar no WhatsApp
+                  </button>
+                </>
+              )}
+              {canIssueInvoice && !row.invoice && (
+                <button
+                  onClick={onIssueInvoice}
+                  disabled={invoiceLoading}
+                  className={clsx(actionButtonBase, 'border border-[#cbd5e1] bg-white text-[#475569] hover:bg-slate-50')}
+                >
+                  {invoiceLoading ? <Loader2 size={15} className="animate-spin" /> : <FileText size={15} />}
+                  {invoiceLoading ? 'Emitindo...' : 'Emitir NF-e'}
+                </button>
+              )}
+            </div>
+          )}
 
           {customer.personType === 'PJ' && (
             <div className="mt-3 border-t border-[#f1f5f9] pt-3">
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2.5 rounded-lg bg-[#f8fafc] px-3 py-2.5">
                 <span className="text-[10.5px] font-semibold uppercase tracking-[0.05em] text-[#94a3b8]">NF-e</span>
                 <span className={clsx('rounded-md border px-2 py-0.5 text-[11px] font-semibold', invoiceMeta.badgeClass)}>
                   {invoiceMeta.label}
                 </span>
-                {row.invoice?.status !== 'error' && (
+                {row.invoice?.status !== 'error' && invoiceMeta.text && (
                   <span className="text-[12.5px] text-[#94a3b8]">{invoiceMeta.text}</span>
                 )}
-                {!row.invoice && !canIssueInvoice && (
-                  <span className="text-[12.5px] text-[#94a3b8]">Dados fiscais incompletos.</span>
+                {!hasLinkedOrder && (
+                  <span className="text-[12.5px] text-[#64748b]">
+                    NF-e indisponível: lançamento manual sem pedido vinculado.
+                  </span>
+                )}
+                {invoiceBlockedByFiscalData && (
+                  <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12.5px] text-[#64748b]">
+                    Dados fiscais incompletos: faltam {missingFiscalFields.join(', ')}.
+                    <button
+                      type="button"
+                      onClick={onEditCustomer}
+                      className="font-semibold text-[#ea580c] underline decoration-[#fed7aa] underline-offset-2 hover:text-[#c2410c]"
+                    >
+                      Completar cadastro
+                    </button>
+                  </span>
                 )}
                 {row.invoice?.status === 'authorized' && (
                   <>
                     {row.invoice.danfeUrl && (
-                      <a href={row.invoice.danfeUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 border-b border-[#cbd5e1] text-[12.5px] text-[#334155]">
+                      <a href={row.invoice.danfeUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md border border-[#bbf7d0] bg-white px-2 py-1 text-[12.5px] font-medium text-[#166534] hover:bg-[#f0fdf4]">
                         <FileText size={13} /> Ver DANFE
                       </a>
                     )}
                     {row.invoice.xmlUrl && (
-                      <a href={row.invoice.xmlUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 border-b border-[#cbd5e1] text-[12.5px] text-[#334155]">
+                      <a href={row.invoice.xmlUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md border border-[#bbf7d0] bg-white px-2 py-1 text-[12.5px] font-medium text-[#166534] hover:bg-[#f0fdf4]">
                         <Download size={13} /> Baixar XML
                       </a>
                     )}
@@ -1222,10 +1310,10 @@ const CreditRow: React.FC<{
                 )}
               </div>
 
-              {row.invoice?.status === 'error' && (
+              {showInvoiceError && (
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3 py-2.5">
                   <span className="text-[12.5px] leading-relaxed text-red-700">
-                    {row.invoice.sefazMessage || 'Erro ao emitir NF-e.'}
+                    {row.invoice?.sefazMessage || 'Erro ao emitir NF-e.'}
                   </span>
                   {canIssueInvoice && (
                     <button
@@ -1233,7 +1321,8 @@ const CreditRow: React.FC<{
                       disabled={invoiceLoading}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-[12.5px] font-semibold text-red-600 disabled:opacity-50"
                     >
-                      <RefreshCw size={13} /> Tentar novamente
+                      {invoiceLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                      {invoiceLoading ? 'Emitindo...' : 'Tentar novamente'}
                     </button>
                   )}
                 </div>
