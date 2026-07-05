@@ -3,7 +3,6 @@ import { useAuth } from '../hooks/useAuth';
 import { ShoppingCart, Users, TrendingUp, Clock, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
-import { io } from 'socket.io-client';
 import type { OrderStatus, OrderType } from '../types';
 import {
   formatCurrencyBRL,
@@ -82,7 +81,7 @@ const DashboardPage: React.FC = () => {
     lowStockItems: 0,
   });
   const [recentOrders, setRecentOrders] = React.useState<RecentOrder[]>([]);
-  const [onlineUsers, setOnlineUsers] = React.useState(0);
+  const onlineUsers = 0;
   const [loadingStats, setLoadingStats] = React.useState(true);
   const [loadingRecentOrders, setLoadingRecentOrders] = React.useState(true);
   const [recentOrdersError, setRecentOrdersError] = React.useState('');
@@ -165,17 +164,9 @@ const DashboardPage: React.FC = () => {
       fetchRecentOrders();
     }, 30000);
 
-    const socketUrl = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace('/api', '');
-    const socket = io(socketUrl);
-
-    socket.on('menuUsersUpdate', (count: number) => {
-      if (active) setOnlineUsers(count);
-    });
-
     return () => {
       active = false;
       window.clearInterval(intervalId);
-      socket.disconnect();
     };
   }, [user?.role]);
 
