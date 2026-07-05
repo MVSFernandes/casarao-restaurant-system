@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import type { Category, Product, RestaurantConfig } from '../../types';
-import { ShoppingCart, Plus, Minus, Trash2, X, UtensilsCrossed, Users } from 'lucide-react';
-import { io } from 'socket.io-client';
+import { ShoppingCart, Plus, Minus, Trash2, X, UtensilsCrossed } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface CartItem { product: Product; quantity: number; }
 
-const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:3001');
 
 const PublicMenuPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -15,7 +13,6 @@ const PublicMenuPage: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
   const [activeCategory, setActiveCategory] = useState('');
-  const [activeUsers, setActiveUsers] = useState(0);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('PIX');
   const [customerName, setCustomerName] = useState('');
@@ -37,14 +34,6 @@ const PublicMenuPage: React.FC = () => {
       }
     };
     fetchData();
-
-    socket.emit('joinMenu');
-    socket.on('menuUsersUpdate', (count: number) => setActiveUsers(count));
-
-    return () => {
-      socket.emit('leaveMenu');
-      socket.off('menuUsersUpdate');
-    };
   }, []);
 
   const addToCart = (product: Product) => {
@@ -110,10 +99,6 @@ const PublicMenuPage: React.FC = () => {
             <UtensilsCrossed className="text-primary-600" size={28} />
             <div>
               <h1 className="font-bold text-gray-900">{config?.name || 'Restaurante'}</h1>
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <Users size={12} />
-                <span>{activeUsers} {activeUsers === 1 ? 'pessoa' : 'pessoas'} vendo o cardápio</span>
-              </div>
             </div>
           </div>
           <button onClick={() => setShowCart(true)} className="relative btn-primary p-3">

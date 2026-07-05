@@ -2,9 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import type { StockItem } from '../../types';
 import { Plus, Pencil, Trash2, AlertTriangle, Bell, X } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
 
-const socketUrl = (import.meta.env.VITE_API_URL || 'http://localhost:3001/api').replace('/api', '');
 
 type StockLevel = 'NORMAL' | 'LOW' | 'CRITICAL';
 
@@ -43,27 +41,6 @@ const StockItemsPage: React.FC = () => {
 
   useEffect(() => {
     fetchItems();
-
-    const socket: Socket = io(socketUrl, {
-      transports: ['websocket', 'polling'],
-    });
-
-    socket.on('connect', () => {
-      console.log('Socket conectado:', socket.id);
-    });
-
-    socket.on('stock:updated', () => {
-      fetchItems();
-    });
-
-    socket.on('stock:low', (data: StockItem[]) => {
-      setLowStockItems(data);
-      fetchItems();
-    });
-
-    return () => {
-      socket.disconnect();
-    };
   }, []);
 
   const handleOpenModal = (item?: StockItem) => {
