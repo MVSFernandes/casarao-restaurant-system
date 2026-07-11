@@ -51,6 +51,14 @@ interface ToastState {
   message: string;
 }
 
+const getPayloadWeight = (item: Pick<CartItem, 'saleType' | 'weight'>) => {
+  const weight = Number(item.weight);
+  if (item.saleType === 'UNIT' || !Number.isFinite(weight) || weight <= 0) {
+    return undefined;
+  }
+  return weight;
+};
+
 const getCurrentWeekDay = () => {
   const day = new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
@@ -909,16 +917,19 @@ const OrdersPage: React.FC = () => {
         waiterId: selectedWaiterId || undefined,
         deliveryFee: currentDeliveryFee,
         deliveryType: orderType === 'DELIVERY' && deliveryType !== '' ? deliveryType : undefined,
-        items: cart.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          weight: item.weight,
-          notes: item.notes,
-          unitPrice: getItemUnitPrice(item),
-          manualPrice:
-            item.manualPrice !== '' && item.manualPrice !== undefined ? item.manualPrice : null,
-          saleType: item.saleType,
-        })),
+        items: cart.map((item) => {
+          const weight = getPayloadWeight(item);
+          return {
+            productId: item.product.id,
+            quantity: item.quantity,
+            ...(weight !== undefined ? { weight } : {}),
+            notes: item.notes,
+            unitPrice: getItemUnitPrice(item),
+            manualPrice:
+              item.manualPrice !== '' && item.manualPrice !== undefined ? item.manualPrice : null,
+            saleType: item.saleType,
+          };
+        }),
       });
 
       resetOrderForm();

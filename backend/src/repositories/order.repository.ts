@@ -8,6 +8,14 @@ import { NotFoundError } from '../types/errors';
 const TABLE = 'orders';
 const ITEMS_TABLE = 'order_items';
 
+const normalizeOrderItemWeight = (item: OrderItem): number | null => {
+  const numericWeight = Number(item.weight);
+  if (item.saleType === 'UNIT' || !Number.isFinite(numericWeight) || numericWeight <= 0) {
+    return null;
+  }
+  return numericWeight;
+};
+
 export interface RecentOrderSummary {
   id: string;
   type: OrderType;
@@ -169,7 +177,10 @@ export const orderRepository = {
   },
 
   async addItem(item: OrderItem): Promise<OrderItem> {
-    const payload = toOrderItemInsert(item);
+    const payload = toOrderItemInsert({
+      ...item,
+      weight: normalizeOrderItemWeight(item),
+    });
     const { data, error } = await supabase
       .from(ITEMS_TABLE)
       .insert(payload)

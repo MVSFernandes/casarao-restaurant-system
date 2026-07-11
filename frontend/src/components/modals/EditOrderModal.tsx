@@ -27,6 +27,14 @@ interface CartItem {
   manualPrice?: number | ''; 
 }
 
+const getPayloadWeight = (item: Pick<CartItem, 'saleType' | 'weight'>) => {
+  const weight = Number(item.weight);
+  if (item.saleType === 'UNIT' || !Number.isFinite(weight) || weight <= 0) {
+    return undefined;
+  }
+  return weight;
+};
+
 const parseNotesAndExtras = (originalNotes: string) => {
   const lines = (originalNotes || '').split('\n');
   const extras: ExtraItem[] = [];
@@ -248,10 +256,12 @@ export const EditOrderModal: React.FC<EditOrderModalProps> = ({ order, categorie
             ...extraLines
           ].filter(Boolean).join('\n').trim();
 
+          const weight = getPayloadWeight(item);
+
           return {
             productId: item.product.id,
             quantity: item.quantity,
-            weight: item.weight,
+            ...(weight !== undefined ? { weight } : {}),
             notes: finalNotes,
             unitPrice: item.baseUnitPrice + item.extras.reduce((sum, e) => sum + e.price, 0),
             manualPrice: item.manualPrice !== '' ? item.manualPrice : null,
