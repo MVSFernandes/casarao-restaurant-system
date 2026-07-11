@@ -61,6 +61,11 @@ const getPayloadWeight = (item: Pick<CartItem, 'saleType' | 'weight'>) => {
   return weight;
 };
 
+const createIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const getCurrentWeekDay = () => {
   const day = new Intl.DateTimeFormat('en-US', {
     weekday: 'short',
@@ -132,6 +137,7 @@ const OrdersPage: React.FC = () => {
   const [manualPriceEditors, setManualPriceEditors] = useState<Record<number, boolean>>({});
   const [orderSubmitting, setOrderSubmitting] = useState(false);
   const [paymentSubmittingKey, setPaymentSubmittingKey] = useState<string | null>(null);
+  const [newOrderIdempotencyKey, setNewOrderIdempotencyKey] = useState('');
   const [selectedWaiterId, setSelectedWaiterId] = useState('');
   const [orderType, setOrderType] = useState('DINE_IN');
   const [selectedTableId, setSelectedTableId] = useState('');
@@ -862,6 +868,7 @@ const OrdersPage: React.FC = () => {
     setManualPriceEditors({});
     orderSubmittingRef.current = false;
     setOrderSubmitting(false);
+    setNewOrderIdempotencyKey('');
     setShowNewOrder(false);
     setConfirmDiscardNewOrder(false);
     setSelectedWaiterId('');
@@ -885,6 +892,11 @@ const OrdersPage: React.FC = () => {
     }
 
     resetOrderForm();
+  };
+
+  const openNewOrderModal = () => {
+    setNewOrderIdempotencyKey(createIdempotencyKey());
+    setShowNewOrder(true);
   };
 
   const handleCreateOrder = async () => {
@@ -931,7 +943,9 @@ const OrdersPage: React.FC = () => {
     try {
       orderSubmittingRef.current = true;
       setOrderSubmitting(true);
+      const idempotencyKey = newOrderIdempotencyKey || createIdempotencyKey();
       await api.post('/orders', {
+        idempotencyKey,
         type: orderType,
         customerName:
           orderType === 'DELIVERY' || orderType === 'TAKE_AWAY' || orderType === 'DINE_IN'
@@ -960,6 +974,8 @@ const OrdersPage: React.FC = () => {
             saleType: item.saleType,
           };
         }),
+      }, {
+        headers: { 'X-Idempotency-Key': idempotencyKey },
       });
 
       resetOrderForm();
@@ -1535,7 +1551,7 @@ const OrdersPage: React.FC = () => {
                 showToast('error', 'Abra o caixa antes de criar um novo pedido.');
                 return;
               }
-              setShowNewOrder(true);
+              openNewOrderModal();
             }}
             disabled={!isCashOpen}
             className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"

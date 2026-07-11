@@ -6,6 +6,10 @@ import { clsx } from 'clsx';
 
 interface CartItem { product: Product; quantity: number; }
 
+const createIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const PublicMenuPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -19,6 +23,7 @@ const PublicMenuPage: React.FC = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderType, setOrderType] = useState('TAKE_AWAY');
   const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState('');
   const checkoutSubmittingRef = useRef(false);
 
   useEffect(() => {
@@ -63,16 +68,21 @@ const PublicMenuPage: React.FC = () => {
     try {
       checkoutSubmittingRef.current = true;
       setCheckoutSubmitting(true);
+      const idempotencyKey = checkoutIdempotencyKey || createIdempotencyKey();
       // Cria ou busca o cliente
       await api.post('/orders/public', {
+        idempotencyKey,
         customerName,
         customerPhone,
         type: orderType,
         paymentMethod,
         items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
+      }, {
+        headers: { 'X-Idempotency-Key': idempotencyKey },
       });
       setOrderPlaced(true);
       setCart([]);
+      setCheckoutIdempotencyKey('');
     } catch (error) {
       console.error(error);
     } finally {
@@ -109,7 +119,13 @@ const PublicMenuPage: React.FC = () => {
               <h1 className="font-bold text-gray-900">{config?.name || 'Restaurante'}</h1>
             </div>
           </div>
-          <button onClick={() => setShowCart(true)} className="relative btn-primary p-3">
+          <button
+            onClick={() => {
+              setCheckoutIdempotencyKey(createIdempotencyKey());
+              setShowCart(true);
+            }}
+            className="relative btn-primary p-3"
+          >
             <ShoppingCart size={20} />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
