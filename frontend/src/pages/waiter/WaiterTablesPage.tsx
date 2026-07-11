@@ -36,6 +36,7 @@ const WaiterTablesPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [loading, setLoading] = useState(true);
   const [showAddItems, setShowAddItems] = useState(false);
+  const [confirmDiscardOrder, setConfirmDiscardOrder] = useState(false);
   const [marmitaProduct, setMarmitaProduct] = useState<Product | null>(null);
   const [marmitaMenuItems, setMarmitaMenuItems] = useState<MarmitaMenuItem[]>([]);
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -195,7 +196,26 @@ const showToast = (type: 'success' | 'error', message: string) => {
     }
     setCart([]);
     setCustomerName('');
+    setMarmitaProduct(null);
+    setConfirmDiscardOrder(false);
     setShowAddItems(true);
+  };
+
+  const resetOrderModal = () => {
+    setCart([]);
+    setCustomerName('');
+    setMarmitaProduct(null);
+    setConfirmDiscardOrder(false);
+    setShowAddItems(false);
+  };
+
+  const handleCloseOrderModal = () => {
+    if (cart.length > 0) {
+      setConfirmDiscardOrder(true);
+      return;
+    }
+
+    resetOrderModal();
   };
 
   const handleSendToKitchen = async () => {
@@ -218,9 +238,7 @@ const showToast = (type: 'success' | 'error', message: string) => {
           };
         }),
       });
-      setCart([]);
-      setCustomerName('');
-      setShowAddItems(false);
+      resetOrderModal();
       await fetchTables();
       const refreshed = selectedTable ? { ...selectedTable, status: 'OCCUPIED' as const } : selectedTable;
       if (refreshed) {
@@ -373,7 +391,7 @@ const showToast = (type: 'success' | 'error', message: string) => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between gap-3">
               <h2 className="text-lg md:text-xl font-bold">{selectedTable?.status === 'AVAILABLE' ? 'Novo Pedido' : 'Adicionar Itens'} - Mesa {selectedTable?.number}</h2>
-              <button onClick={() => { setShowAddItems(false); setCustomerName(''); }} className="btn-secondary p-2">✕</button>
+              <button onClick={handleCloseOrderModal} className="btn-secondary p-2">✕</button>
             </div>
             <div className="flex flex-col lg:flex-row flex-1 overflow-hidden min-h-0">
               <div className="flex-1 overflow-y-auto p-4 min-h-0">
@@ -487,6 +505,33 @@ const showToast = (type: 'success' | 'error', message: string) => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDiscardOrder && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-900">Descartar pedido em andamento?</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              Os itens e dados preenchidos neste pedido serao removidos.
+            </p>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setConfirmDiscardOrder(false)}
+                className="btn-secondary flex-1 py-3"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={resetOrderModal}
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+              >
+                Descartar
+              </button>
             </div>
           </div>
         </div>
