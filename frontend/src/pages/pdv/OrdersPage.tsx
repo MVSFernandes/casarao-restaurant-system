@@ -125,6 +125,7 @@ const OrdersPage: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showNewOrder, setShowNewOrder] = useState(false);
+  const [confirmDiscardNewOrder, setConfirmDiscardNewOrder] = useState(false);
   const [selectedWaiterId, setSelectedWaiterId] = useState('');
   const [orderType, setOrderType] = useState('DINE_IN');
   const [selectedTableId, setSelectedTableId] = useState('');
@@ -847,6 +848,7 @@ const OrdersPage: React.FC = () => {
   const resetOrderForm = () => {
     setCart([]);
     setShowNewOrder(false);
+    setConfirmDiscardNewOrder(false);
     setSelectedWaiterId('');
     setSelectedTableId('');
     setOrderType('DINE_IN');
@@ -859,6 +861,15 @@ const OrdersPage: React.FC = () => {
     setDeliveryNotes('');
     setDeliveryType('');
     setMarmitaProduct(null);
+  };
+
+  const handleCloseNewOrder = () => {
+    if (cart.length > 0) {
+      setConfirmDiscardNewOrder(true);
+      return;
+    }
+
+    resetOrderForm();
   };
 
   const handleCreateOrder = async () => {
@@ -1894,7 +1905,7 @@ const OrdersPage: React.FC = () => {
             <div className="p-4 border-b flex items-center justify-between">
               <h2 className="text-xl font-bold">Novo Pedido</h2>
               <button
-                onClick={() => setShowNewOrder(false)}
+                onClick={handleCloseNewOrder}
                 className="btn-secondary p-2"
               >
                 ✕
@@ -2263,6 +2274,33 @@ const OrdersPage: React.FC = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDiscardNewOrder && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-900">Descartar pedido em andamento?</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              Os itens e dados preenchidos neste pedido serao removidos.
+            </p>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setConfirmDiscardNewOrder(false)}
+                className="btn-secondary flex-1 py-3"
+              >
+                Cancelar
+              </button>
+
+              <button
+                onClick={resetOrderForm}
+                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+              >
+                Descartar
+              </button>
             </div>
           </div>
         </div>
