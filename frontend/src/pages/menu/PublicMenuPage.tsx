@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import type { Category, Product, RestaurantConfig } from '../../types';
-import { ShoppingCart, Plus, Minus, Trash2, X, UtensilsCrossed } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, X, UtensilsCrossed, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface CartItem { product: Product; quantity: number; }
@@ -18,6 +18,8 @@ const PublicMenuPage: React.FC = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderType, setOrderType] = useState('TAKE_AWAY');
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const checkoutSubmittingRef = useRef(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,8 +58,11 @@ const PublicMenuPage: React.FC = () => {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = async () => {
+    if (checkoutSubmittingRef.current) return;
     if (cart.length === 0 || !customerName) return;
     try {
+      checkoutSubmittingRef.current = true;
+      setCheckoutSubmitting(true);
       // Cria ou busca o cliente
       await api.post('/orders/public', {
         customerName,
@@ -70,6 +75,9 @@ const PublicMenuPage: React.FC = () => {
       setCart([]);
     } catch (error) {
       console.error(error);
+    } finally {
+      checkoutSubmittingRef.current = false;
+      setCheckoutSubmitting(false);
     }
   };
 
@@ -242,8 +250,15 @@ const PublicMenuPage: React.FC = () => {
                   <span>Total</span>
                   <span>R$ {cartTotal.toFixed(2)}</span>
                 </div>
-                <button onClick={handleCheckout} disabled={!customerName} className="btn-primary w-full py-4 text-lg">
-                  Finalizar Pedido
+                <button onClick={handleCheckout} disabled={!customerName || checkoutSubmitting} className="btn-primary w-full py-4 text-lg">
+                  {checkoutSubmitting ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 size={18} className="animate-spin" />
+                      Confirmando...
+                    </span>
+                  ) : (
+                    'Finalizar Pedido'
+                  )}
                 </button>
               </div>
             )}
