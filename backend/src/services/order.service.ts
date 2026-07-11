@@ -87,12 +87,24 @@ interface ResolvedItemPricing {
 // Helpers privados
 // ---------------------------------------------------------------------------
 
+function normalizeOrderItemWeight(
+  saleType: SaleType | string | null | undefined,
+  weight: number | null | undefined
+): number | null {
+  const numericWeight = Number(weight);
+  if (saleType === 'UNIT' || !Number.isFinite(numericWeight) || numericWeight <= 0) {
+    return null;
+  }
+  return numericWeight;
+}
+
 async function resolveItemPricing(item: CreateOrderItemInput): Promise<ResolvedItemPricing> {
   const product = await productRepository.findById(item.productId);
   if (!product) throw new NotFoundError('Product', item.productId);
 
   const category = await categoryRepository.findById(product.categoryId);
   const saleType: SaleType = (item.saleType as SaleType) ?? (product.isByWeight ? 'WEIGHT' : 'UNIT');
+  const normalizedWeight = normalizeOrderItemWeight(saleType, item.weight);
 
   let unitPrice =
     item.unitPrice !== undefined && item.unitPrice !== null && item.unitPrice !== 0
@@ -118,7 +130,7 @@ async function resolveItemPricing(item: CreateOrderItemInput): Promise<ResolvedI
   if (manualPrice !== null) {
     itemPrice = manualPrice;
   } else if (product.isByWeight) {
-    const weightInKg = (item.weight ?? 0) / 1000;
+    const weightInKg = (normalizedWeight ?? 0) / 1000;
     itemPrice = unitPrice * weightInKg;
   } else {
     itemPrice = unitPrice * (item.quantity ?? 1);
@@ -127,7 +139,7 @@ async function resolveItemPricing(item: CreateOrderItemInput): Promise<ResolvedI
   return {
     productId: item.productId,
     quantity: item.quantity ?? 1,
-    weight: item.weight ?? null,
+    weight: normalizedWeight,
     price: itemPrice,
     unitPrice,
     manualPrice,

@@ -16,6 +16,14 @@ interface CartItem {
   unitPrice?: number;
 }
 
+const getPayloadWeight = (item: Pick<CartItem, 'saleType' | 'weight'>) => {
+  const weight = Number(item.weight);
+  if (item.saleType === 'UNIT' || !Number.isFinite(weight) || weight <= 0) {
+    return undefined;
+  }
+  return weight;
+};
+
 const statusLabels = ORDER_STATUS_LABELS;
 const statusColors = ORDER_STATUS_BADGE_CLASSES;
 
@@ -198,14 +206,17 @@ const showToast = (type: 'success' | 'error', message: string) => {
         type: 'DINE_IN',
         tableId: selectedTable.id,
         customerName: customerName.trim() || undefined,
-        items: cart.map((item) => ({
-          productId: item.product.id,
-          quantity: item.quantity,
-          weight: item.weight,
-          notes: item.notes,
-          unitPrice: getItemUnitPrice(item),
-          saleType: item.saleType,
-        })),
+        items: cart.map((item) => {
+          const weight = getPayloadWeight(item);
+          return {
+            productId: item.product.id,
+            quantity: item.quantity,
+            ...(weight !== undefined ? { weight } : {}),
+            notes: item.notes,
+            unitPrice: getItemUnitPrice(item),
+            saleType: item.saleType,
+          };
+        }),
       });
       setCart([]);
       setCustomerName('');
