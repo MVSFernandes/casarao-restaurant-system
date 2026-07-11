@@ -754,7 +754,7 @@ const OrdersPage: React.FC = () => {
     extraTotal: number;
   }) => {
     if (!marmitaProduct) return;
-    void extraTotal;
+    void _extraTotal;
 
     const customProduct: Product = {
       ...marmitaProduct,
