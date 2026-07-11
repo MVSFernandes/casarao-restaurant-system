@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import type { Category, Product, RestaurantConfig } from '../../types';
-import { ShoppingCart, Plus, Minus, Trash2, X, UtensilsCrossed } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, X, UtensilsCrossed, Loader2 } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface CartItem { product: Product; quantity: number; }
 
+const createIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const PublicMenuPage: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -18,6 +22,9 @@ const PublicMenuPage: React.FC = () => {
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderType, setOrderType] = useState('TAKE_AWAY');
+  const [checkoutSubmitting, setCheckoutSubmitting] = useState(false);
+  const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState('');
+  const checkoutSubmittingRef = useRef(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -56,20 +63,31 @@ const PublicMenuPage: React.FC = () => {
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCheckout = async () => {
+    if (checkoutSubmittingRef.current) return;
     if (cart.length === 0 || !customerName) return;
     try {
+      checkoutSubmittingRef.current = true;
+      setCheckoutSubmitting(true);
+      const idempotencyKey = checkoutIdempotencyKey || createIdempotencyKey();
       // Cria ou busca o cliente
       await api.post('/orders/public', {
+        idempotencyKey,
         customerName,
         customerPhone,
         type: orderType,
         paymentMethod,
         items: cart.map((item) => ({ productId: item.product.id, quantity: item.quantity })),
+      }, {
+        headers: { 'X-Idempotency-Key': idempotencyKey },
       });
       setOrderPlaced(true);
       setCart([]);
+      setCheckoutIdempotencyKey('');
     } catch (error) {
       console.error(error);
+    } finally {
+      checkoutSubmittingRef.current = false;
+      setCheckoutSubmitting(false);
     }
   };
 
@@ -101,7 +119,13 @@ const PublicMenuPage: React.FC = () => {
               <h1 className="font-bold text-gray-900">{config?.name || 'Restaurante'}</h1>
             </div>
           </div>
-          <button onClick={() => setShowCart(true)} className="relative btn-primary p-3">
+          <button
+            onClick={() => {
+              setCheckoutIdempotencyKey(createIdempotencyKey());
+              setShowCart(true);
+            }}
+            className="relative btn-primary p-3"
+          >
             <ShoppingCart size={20} />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
@@ -242,8 +266,15 @@ const PublicMenuPage: React.FC = () => {
                   <span>Total</span>
                   <span>R$ {cartTotal.toFixed(2)}</span>
                 </div>
-                <button onClick={handleCheckout} disabled={!customerName} className="btn-primary w-full py-4 text-lg">
-                  Finalizar Pedido
+                <button onClick={handleCheckout} disabled={!customerName || checkoutSubmitting} className="btn-primary w-full py-4 text-lg">
+                  {checkoutSubmitting ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 size={18} className="animate-spin" />
+                      Confirmando...
+                    </span>
+                  ) : (
+                    'Finalizar Pedido'
+                  )}
                 </button>
               </div>
             )}

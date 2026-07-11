@@ -6,6 +6,89 @@ import { stockService } from '../services/domain.services';
 import { DomainError } from '../types/errors';
 import { productRepository } from '../repositories/product.repository';
 
+type IdempotencyResult = {
+  status: number;
+  body: unknown;
+};
+
+type IdempotencyEntry = {
+  createdAt: number;
+  promise?: Promise<IdempotencyResult>;
+  result?: IdempotencyResult;
+};
+
+const IDEMPOTENCY_TTL_MS = 5 * 60 * 1000;
+const idempotencyStore = new Map<string, IdempotencyEntry>();
+
+const cleanupIdempotencyStore = () => {
+  const now = Date.now();
+  for (const [key, entry] of idempotencyStore.entries()) {
+    if (now - entry.createdAt > IDEMPOTENCY_TTL_MS) {
+      idempotencyStore.delete(key);
+    }
+  }
+};
+
+const getIdempotencyKey = (req: Request) => {
+  const headerKey = req.get('X-Idempotency-Key');
+  const bodyKey = req.body?.idempotencyKey;
+  const rawKey = typeof headerKey === 'string' && headerKey.trim() ? headerKey : bodyKey;
+  return typeof rawKey === 'string' ? rawKey.trim().slice(0, 200) : '';
+};
+
+const getScopedIdempotencyKey = (req: Request, scope: string) => {
+  const key = getIdempotencyKey(req);
+  if (!key) return '';
+  const user = (req as any).user;
+  const actor = user?.id ?? req.ip ?? 'public';
+  return `${scope}:${actor}:${key}`;
+};
+
+const sendIdempotencyResult = (
+  res: Response,
+  result: IdempotencyResult,
+  replayed = false
+) => {
+  if (replayed) res.setHeader('X-Idempotent-Replay', 'true');
+  res.status(result.status).json(result.body);
+};
+
+const runIdempotent = async (
+  req: Request,
+  res: Response,
+  scope: string,
+  handler: () => Promise<IdempotencyResult>,
+  fallback: string
+) => {
+  const scopedKey = getScopedIdempotencyKey(req, scope);
+
+  try {
+    if (!scopedKey) {
+      const result = await handler();
+      sendIdempotencyResult(res, result);
+      return;
+    }
+
+    cleanupIdempotencyStore();
+    const existing = idempotencyStore.get(scopedKey);
+    if (existing) {
+      const result = existing.result ?? await existing.promise!;
+      sendIdempotencyResult(res, result, true);
+      return;
+    }
+
+    const promise = handler();
+    idempotencyStore.set(scopedKey, { createdAt: Date.now(), promise });
+
+    const result = await promise;
+    idempotencyStore.set(scopedKey, { createdAt: Date.now(), result });
+    sendIdempotencyResult(res, result);
+  } catch (error) {
+    if (scopedKey) idempotencyStore.delete(scopedKey);
+    handleError(res, error, fallback);
+  }
+};
+
 // Helper: busca itens do pedido com produto aninhado
 async function getItemsWithProduct(orderId: string) {
   const items = await orderRepository.findItems(orderId);
@@ -109,27 +192,22 @@ export const getOrderById = async (req: Request, res: Response) => {
 };
 
 export const createOrder = async (req: Request, res: Response) => {
-  try {
+  await runIdempotent(req, res, 'orders:create', async () => {
     const user = (req as any).user;
     const order = await orderService.createOrder(req.body, { id: user.id, role: user.role });
     await emitStockUpdate(req);
     const items = await getItemsWithProduct(order.id);
-    res.status(201).json({ ...order, items });
-  } catch (error) {
-    console.error('CREATE ORDER ERROR:', error); // ← adiciona essa linha
-    handleError(res, error, 'Erro ao criar pedido');
-  }
+    return { status: 201, body: { ...order, items } };
+  }, 'Erro ao criar pedido');
 };
 
 export const createPublicOrder = async (req: Request, res: Response) => {
-  try {
+  await runIdempotent(req, res, 'orders:create-public', async () => {
     const order = await orderService.createPublicOrder(req.body);
     await emitStockUpdate(req);
     const items = await getItemsWithProduct(order.id);
-    res.status(201).json({ ...order, items });
-  } catch (error) {
-    handleError(res, error, 'Erro ao criar pedido público');
-  }
+    return { status: 201, body: { ...order, items } };
+  }, 'Erro ao criar pedido público');
 };
 
 export const updateOrderStatus = async (req: Request, res: Response) => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../../services/api';
 import type {
   Order,
@@ -28,6 +28,7 @@ import {
   CreditCard,
   QrCode,
   Wallet,
+  Loader2,
 } from 'lucide-react';
 import { EditOrderModal } from '../../components/modals/EditOrderModal';
 import { MarmitaBuilderModal } from '../../components/modals/MarmitaBuilderModal';
@@ -59,6 +60,11 @@ const getPayloadWeight = (item: Pick<CartItem, 'saleType' | 'weight'>) => {
   }
   return weight;
 };
+
+const createIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const getCurrentWeekDay = () => {
   const day = new Intl.DateTimeFormat('en-US', {
@@ -129,6 +135,9 @@ const OrdersPage: React.FC = () => {
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [confirmDiscardNewOrder, setConfirmDiscardNewOrder] = useState(false);
   const [manualPriceEditors, setManualPriceEditors] = useState<Record<number, boolean>>({});
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [paymentSubmittingKey, setPaymentSubmittingKey] = useState<string | null>(null);
+  const [newOrderIdempotencyKey, setNewOrderIdempotencyKey] = useState('');
   const [selectedWaiterId, setSelectedWaiterId] = useState('');
   const [orderType, setOrderType] = useState('DINE_IN');
   const [selectedTableId, setSelectedTableId] = useState('');
@@ -161,8 +170,11 @@ const OrdersPage: React.FC = () => {
   const [companyCnpj, setCompanyCnpj] = useState('');
   const [creditOrder, setCreditOrder] = useState<Order | null>(null);
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState('');
+  const orderSubmittingRef = useRef(false);
+  const paymentSubmittingRef = useRef<string | null>(null);
 
   const canEditManualPrice = user?.role === 'ADMIN' || user?.role === 'CASHIER';
+  const getPaymentSubmittingKey = (orderId: string, method: string) => `${orderId}:${method}`;
 
   const getCategoryForProduct = (product: Product) =>
     categories.find((cat) => cat.id === product.categoryId);
@@ -854,6 +866,9 @@ const OrdersPage: React.FC = () => {
   const resetOrderForm = () => {
     setCart([]);
     setManualPriceEditors({});
+    orderSubmittingRef.current = false;
+    setOrderSubmitting(false);
+    setNewOrderIdempotencyKey('');
     setShowNewOrder(false);
     setConfirmDiscardNewOrder(false);
     setSelectedWaiterId('');
@@ -879,7 +894,14 @@ const OrdersPage: React.FC = () => {
     resetOrderForm();
   };
 
+  const openNewOrderModal = () => {
+    setNewOrderIdempotencyKey(createIdempotencyKey());
+    setShowNewOrder(true);
+  };
+
   const handleCreateOrder = async () => {
+    if (orderSubmittingRef.current) return;
+
     if (!currentCash) {
       showToast('error', 'Abra o caixa antes de criar um pedido.');
       return;
@@ -919,7 +941,11 @@ const OrdersPage: React.FC = () => {
     }
 
     try {
+      orderSubmittingRef.current = true;
+      setOrderSubmitting(true);
+      const idempotencyKey = newOrderIdempotencyKey || createIdempotencyKey();
       await api.post('/orders', {
+        idempotencyKey,
         type: orderType,
         customerName:
           orderType === 'DELIVERY' || orderType === 'TAKE_AWAY' || orderType === 'DINE_IN'
@@ -948,6 +974,8 @@ const OrdersPage: React.FC = () => {
             saleType: item.saleType,
           };
         }),
+      }, {
+        headers: { 'X-Idempotency-Key': idempotencyKey },
       });
 
       resetOrderForm();
@@ -956,6 +984,9 @@ const OrdersPage: React.FC = () => {
     } catch (error) {
       console.error('Erro ao criar pedido:', error);
       showToast('error', 'Erro ao criar pedido.');
+    } finally {
+      orderSubmittingRef.current = false;
+      setOrderSubmitting(false);
     }
   };
 
@@ -974,8 +1005,13 @@ const OrdersPage: React.FC = () => {
     orderId: string,
     method: string,
     extraPayload?: Record<string, unknown>
-  ) => {
+  ): Promise<boolean> => {
+    const submitKey = getPaymentSubmittingKey(orderId, method);
+    if (paymentSubmittingRef.current) return false;
+
     try {
+      paymentSubmittingRef.current = submitKey;
+      setPaymentSubmittingKey(submitKey);
       await api.post(`/orders/${orderId}/payment`, {
         method,
         amount: null,
@@ -988,9 +1024,14 @@ const OrdersPage: React.FC = () => {
           ? 'Pedido lançado no fiado com sucesso!'
           : 'Pagamento recebido e pedido finalizado!'
       );
+      return true;
     } catch (error) {
       console.error('Erro ao processar pagamento:', error);
       showToast('error', 'Erro ao processar pagamento.');
+      return false;
+    } finally {
+      paymentSubmittingRef.current = null;
+      setPaymentSubmittingKey(null);
     }
   };
 
@@ -1000,12 +1041,14 @@ const OrdersPage: React.FC = () => {
       return;
     }
 
-    await handleProcessPayment(creditOrder.id, 'CREDIT', {
+    const success = await handleProcessPayment(creditOrder.id, 'CREDIT', {
       customerId: selectedCreditCustomerId,
     });
 
-    setCreditOrder(null);
-    setSelectedCreditCustomerId('');
+    if (success) {
+      setCreditOrder(null);
+      setSelectedCreditCustomerId('');
+    }
   };
 
   const handleCancelOrder = async () => {
@@ -1508,7 +1551,7 @@ const OrdersPage: React.FC = () => {
                 showToast('error', 'Abra o caixa antes de criar um novo pedido.');
                 return;
               }
-              setShowNewOrder(true);
+              openNewOrderModal();
             }}
             disabled={!isCashOpen}
             className="btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1786,38 +1829,74 @@ const OrdersPage: React.FC = () => {
                     </p>
                     <button
                       onClick={() => handleProcessPayment(order.id, 'CASH')}
+                      disabled={paymentSubmittingKey !== null}
                       className="flex-1 min-w-[80px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 transition-colors"
                       title="Receber em Dinheiro"
                     >
-                      <DollarSign size={18} />
-                      <span className="text-xs font-bold">Dinheiro</span>
+                      {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'CASH') ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <DollarSign size={18} />
+                      )}
+                      <span className="text-xs font-bold">
+                        {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'CASH')
+                          ? 'Confirmando...'
+                          : 'Dinheiro'}
+                      </span>
                     </button>
 
                     <button
                       onClick={() => handleProcessPayment(order.id, 'PIX')}
+                      disabled={paymentSubmittingKey !== null}
                       className="flex-1 min-w-[80px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-colors"
                       title="Receber no PIX"
                     >
-                      <QrCode size={18} />
-                      <span className="text-xs font-bold">PIX</span>
+                      {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'PIX') ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <QrCode size={18} />
+                      )}
+                      <span className="text-xs font-bold">
+                        {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'PIX')
+                          ? 'Confirmando...'
+                          : 'PIX'}
+                      </span>
                     </button>
 
                     <button
                       onClick={() => handleProcessPayment(order.id, 'CREDIT_CARD')}
+                      disabled={paymentSubmittingKey !== null}
                       className="flex-1 min-w-[80px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
                       title="Receber no Cartão de Crédito"
                     >
-                      <CreditCard size={18} />
-                      <span className="text-xs font-bold">Crédito</span>
+                      {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'CREDIT_CARD') ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <CreditCard size={18} />
+                      )}
+                      <span className="text-xs font-bold">
+                        {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'CREDIT_CARD')
+                          ? 'Confirmando...'
+                          : 'Crédito'}
+                      </span>
                     </button>
 
                     <button
                       onClick={() => handleProcessPayment(order.id, 'DEBIT_CARD')}
+                      disabled={paymentSubmittingKey !== null}
                       className="flex-1 min-w-[80px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition-colors"
                       title="Receber no Cartão de Débito"
                     >
-                      <CreditCard size={18} />
-                      <span className="text-xs font-bold">Débito</span>
+                      {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'DEBIT_CARD') ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <CreditCard size={18} />
+                      )}
+                      <span className="text-xs font-bold">
+                        {paymentSubmittingKey === getPaymentSubmittingKey(order.id, 'DEBIT_CARD')
+                          ? 'Confirmando...'
+                          : 'Débito'}
+                      </span>
                     </button>
 
                     <button
@@ -1825,6 +1904,7 @@ const OrdersPage: React.FC = () => {
                         setCreditOrder(order);
                         setSelectedCreditCustomerId(order.customerId || '');
                       }}
+                      disabled={paymentSubmittingKey !== null}
                       className="flex-1 min-w-[80px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors"
                       title="Lançar no fiado"
                     >
@@ -1887,10 +1967,20 @@ const OrdersPage: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={confirmCreditPayment}
-                disabled={!selectedCreditCustomerId}
+                disabled={
+                  !selectedCreditCustomerId ||
+                  paymentSubmittingKey === getPaymentSubmittingKey(creditOrder.id, 'CREDIT')
+                }
                 className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Confirmar Fiado
+                {paymentSubmittingKey === getPaymentSubmittingKey(creditOrder.id, 'CREDIT') ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    Confirmando...
+                  </span>
+                ) : (
+                  'Confirmar Fiado'
+                )}
               </button>
               <button
                 onClick={() => {
@@ -2327,10 +2417,17 @@ const OrdersPage: React.FC = () => {
 
                   <button
                     onClick={handleCreateOrder}
-                    disabled={cart.length === 0 || !isCashOpen}
+                    disabled={cart.length === 0 || !isCashOpen || orderSubmitting}
                     className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Confirmar Pedido
+                    {orderSubmitting ? (
+                      <span className="inline-flex items-center justify-center gap-2">
+                        <Loader2 size={18} className="animate-spin" />
+                        Confirmando...
+                      </span>
+                    ) : (
+                      'Confirmar Pedido'
+                    )}
                   </button>
                 </div>
               </div>

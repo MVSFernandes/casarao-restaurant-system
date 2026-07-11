@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import api from '../../services/api';
 import type { Table, Order, Product, Category, MarmitaMenuItem, CashRegisterSession } from '../../types';
 import { clsx } from 'clsx';
-import { Plus, Minus, Trash2, Send, Edit, XCircle } from 'lucide-react';
+import { Plus, Minus, Trash2, Send, Edit, XCircle, Loader2 } from 'lucide-react';
 import { MarmitaBuilderModal } from '../../components/modals/MarmitaBuilderModal';
 import { EditOrderModal } from '../../components/modals/EditOrderModal';
 import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from '../../constants/orders';
@@ -23,6 +23,11 @@ const getPayloadWeight = (item: Pick<CartItem, 'saleType' | 'weight'>) => {
   }
   return weight;
 };
+
+const createIdempotencyKey = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 const statusLabels = ORDER_STATUS_LABELS;
 const statusColors = ORDER_STATUS_BADGE_CLASSES;
@@ -45,6 +50,8 @@ const WaiterTablesPage: React.FC = () => {
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [currentCash, setCurrentCash] = useState<CashRegisterSession | null>(null);
   const [customerName, setCustomerName] = useState('');
+  const [orderIdempotencyKey, setOrderIdempotencyKey] = useState('');
+  const orderSubmittingRef = useRef(false);
 
   
   const getCategoryForProduct = (product: Product) =>
@@ -198,6 +205,7 @@ const showToast = (type: 'success' | 'error', message: string) => {
     setCustomerName('');
     setMarmitaProduct(null);
     setConfirmDiscardOrder(false);
+    setOrderIdempotencyKey(createIdempotencyKey());
     setShowAddItems(true);
   };
 
@@ -207,6 +215,8 @@ const showToast = (type: 'success' | 'error', message: string) => {
     setMarmitaProduct(null);
     setConfirmDiscardOrder(false);
     setShowAddItems(false);
+    setOrderIdempotencyKey('');
+    orderSubmittingRef.current = false;
   };
 
   const handleCloseOrderModal = () => {
@@ -219,10 +229,14 @@ const showToast = (type: 'success' | 'error', message: string) => {
   };
 
   const handleSendToKitchen = async () => {
+    if (orderSubmittingRef.current) return;
     if (!selectedTable || cart.length === 0) return;
     try {
+      orderSubmittingRef.current = true;
       setSaving(true);
+      const idempotencyKey = orderIdempotencyKey || createIdempotencyKey();
       await api.post('/orders', {
+        idempotencyKey,
         type: 'DINE_IN',
         tableId: selectedTable.id,
         customerName: customerName.trim() || undefined,
@@ -237,6 +251,8 @@ const showToast = (type: 'success' | 'error', message: string) => {
             saleType: item.saleType,
           };
         }),
+      }, {
+        headers: { 'X-Idempotency-Key': idempotencyKey },
       });
       resetOrderModal();
       await fetchTables();
@@ -250,6 +266,7 @@ const showToast = (type: 'success' | 'error', message: string) => {
       console.error(error);
       showToast('error', 'Erro ao enviar pedido.');
     } finally {
+      orderSubmittingRef.current = false;
       setSaving(false);
     }
   };
@@ -501,7 +518,16 @@ const showToast = (type: 'success' | 'error', message: string) => {
                     <span>R$ {cartTotal.toFixed(2)}</span>
                   </div>
                   <button onClick={handleSendToKitchen} disabled={cart.length === 0 || saving} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
-                    <Send size={18} /> {saving ? 'Enviando...' : 'Enviar para Cozinha'}
+                    {saving ? (
+                      <>
+                        <Loader2 size={18} className="animate-spin" />
+                        Confirmando...
+                      </>
+                    ) : (
+                      <>
+                        <Send size={18} /> Enviar para Cozinha
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
