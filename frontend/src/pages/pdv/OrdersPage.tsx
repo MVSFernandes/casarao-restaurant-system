@@ -32,6 +32,7 @@ import {
 import { EditOrderModal } from '../../components/modals/EditOrderModal';
 import { MarmitaBuilderModal } from '../../components/modals/MarmitaBuilderModal';
 import { ORDER_STATUS_BADGE_CLASSES, ORDER_STATUS_LABELS } from '../../constants/orders';
+import { useAuth } from '../../hooks/useAuth';
 
 const statusColors = ORDER_STATUS_BADGE_CLASSES;
 const statusLabels = ORDER_STATUS_LABELS;
@@ -118,6 +119,7 @@ const parseNotesAndExtras = (originalNotes: string) => {
 };
 
 const OrdersPage: React.FC = () => {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tables, setTables] = useState<Table[]>([]);
@@ -126,6 +128,7 @@ const OrdersPage: React.FC = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [confirmDiscardNewOrder, setConfirmDiscardNewOrder] = useState(false);
+  const [manualPriceEditors, setManualPriceEditors] = useState<Record<number, boolean>>({});
   const [selectedWaiterId, setSelectedWaiterId] = useState('');
   const [orderType, setOrderType] = useState('DINE_IN');
   const [selectedTableId, setSelectedTableId] = useState('');
@@ -158,6 +161,8 @@ const OrdersPage: React.FC = () => {
   const [companyCnpj, setCompanyCnpj] = useState('');
   const [creditOrder, setCreditOrder] = useState<Order | null>(null);
   const [selectedCreditCustomerId, setSelectedCreditCustomerId] = useState('');
+
+  const canEditManualPrice = user?.role === 'ADMIN' || user?.role === 'CASHIER';
 
   const getCategoryForProduct = (product: Product) =>
     categories.find((cat) => cat.id === product.categoryId);
@@ -787,6 +792,7 @@ const OrdersPage: React.FC = () => {
   };
 
   const removeFromCart = (productId: string, index?: number) => {
+    setManualPriceEditors({});
     setCart((prev) => {
       if (typeof index === 'number') {
         const target = prev[index];
@@ -847,6 +853,7 @@ const OrdersPage: React.FC = () => {
 
   const resetOrderForm = () => {
     setCart([]);
+    setManualPriceEditors({});
     setShowNewOrder(false);
     setConfirmDiscardNewOrder(false);
     setSelectedWaiterId('');
@@ -2154,6 +2161,12 @@ const OrdersPage: React.FC = () => {
                       }
 
                       const totalWithExtras = baseItemTotal + extraItemTotal;
+                      const hasManualPrice =
+                        item.manualPrice !== undefined &&
+                        item.manualPrice !== null &&
+                        item.manualPrice !== '';
+                      const showManualPriceEditor =
+                        canEditManualPrice && (manualPriceEditors[index] || hasManualPrice);
 
                       return (
                         <div
@@ -2168,6 +2181,11 @@ const OrdersPage: React.FC = () => {
                                   ? `Preço base: R$ ${baseUnitPrice.toFixed(2)}/kg`
                                   : `Valor base: R$ ${baseUnitPrice.toFixed(2)}`}
                               </p>
+                              {hasManualPrice && (
+                                <span className="mt-1 inline-flex w-fit rounded-full bg-orange-50 px-2 py-0.5 text-[11px] font-semibold text-orange-700 border border-orange-200">
+                                  preço ajustado
+                                </span>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-1">
@@ -2201,7 +2219,7 @@ const OrdersPage: React.FC = () => {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2 mt-2">
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
                             {item.product.isByWeight ? (
                               <input
                                 type="number"
@@ -2221,31 +2239,73 @@ const OrdersPage: React.FC = () => {
                               <div className="flex-1"></div>
                             )}
 
-                            <input
-                              type="number"
-                              placeholder="Fixo (R$)"
-                              title="Valor Fixo - Ignora peso ou quantidade"
-                              className="input py-1.5 text-xs w-full bg-orange-50 border-orange-200 focus:border-orange-400 placeholder:text-orange-400 text-orange-800 font-bold"
-                              value={item.manualPrice !== undefined ? item.manualPrice : ''}
-                              onChange={(e) => {
-                                const val = e.target.value ? parseFloat(e.target.value) : '';
-                                setCart((prev) =>
-                                  prev.map((it, i) =>
-                                    i === index
-                                      ? {
-                                          ...it,
-                                          manualPrice: val,
-                                          weight: val !== '' ? 0 : it.weight,
-                                        }
-                                      : it
-                                  )
-                                );
-                              }}
-                            />
+                            {showManualPriceEditor && (
+                              <div className="flex min-w-[180px] flex-1 items-center gap-2">
+                                <input
+                                  type="number"
+                                  placeholder="Fixo (R$)"
+                                  title="Valor Fixo - Ignora peso ou quantidade"
+                                  className="input py-1.5 text-xs w-full bg-orange-50 border-orange-200 focus:border-orange-400 placeholder:text-orange-400 text-orange-800 font-bold"
+                                  value={item.manualPrice !== undefined ? item.manualPrice : ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value ? parseFloat(e.target.value) : '';
+                                    setCart((prev) =>
+                                      prev.map((it, i) =>
+                                        i === index
+                                          ? {
+                                              ...it,
+                                              manualPrice: val,
+                                              weight: val !== '' ? 0 : it.weight,
+                                            }
+                                          : it
+                                      )
+                                    );
+                                  }}
+                                />
 
-                            <span className="text-sm font-bold text-primary-600 whitespace-nowrap min-w-[70px] text-right">
-                              R$ {totalWithExtras.toFixed(2)}
-                            </span>
+                                {hasManualPrice && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCart((prev) =>
+                                        prev.map((it, i) =>
+                                          i === index ? { ...it, manualPrice: '' } : it
+                                        )
+                                      );
+                                      setManualPriceEditors((current) => ({
+                                        ...current,
+                                        [index]: false,
+                                      }));
+                                    }}
+                                    className="text-xs font-semibold text-orange-700 hover:text-orange-900"
+                                  >
+                                    Limpar
+                                  </button>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1 whitespace-nowrap min-w-[96px] justify-end ml-auto">
+                              <span className="text-sm font-bold text-primary-600 text-right">
+                                R$ {totalWithExtras.toFixed(2)}
+                              </span>
+                              {canEditManualPrice && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setManualPriceEditors((current) => ({
+                                      ...current,
+                                      [index]: !current[index],
+                                    }))
+                                  }
+                                  className="p-1 rounded hover:bg-orange-50 text-orange-600"
+                                  title="editar preço"
+                                  aria-label="editar preço"
+                                >
+                                  <Edit size={14} />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {item.notes && (
